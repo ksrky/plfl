@@ -54,7 +54,6 @@ theorem notin_subs {x : Var} {t : Ty} (t' : Ty) (x_notin_t : x ∉ tyvars t) :
         | inl h => contradiction
         | inr h => contradiction
 
-
 /- Getting symbols from type -/
 def symbols : Ty → List Symbol
   | Ty.var _ => []
@@ -92,7 +91,7 @@ theorem not_occurs {x : Var} {t : Ty} (h : occurs x t = false) :
             have _ := ih2 h.right
             contradiction
 
-theorem notin_subs_applied {x : Var} {t : Ty} {l : List (Ty × Ty)} (x_notin_t : x ∉ tyvars t) :
+theorem notin_subs_applied {x : Var} {t : Ty} (l : List (Ty × Ty)) (x_notin_t : x ∉ tyvars t) :
   x ∉ (l.map (tyvars_constraint ∘ subs_constraint x t)).join := by
     induction l with
     | nil => simp
@@ -119,22 +118,22 @@ theorem notin_subs_applied {x : Var} {t : Ty} {l : List (Ty × Ty)} (x_notin_t :
 def unify_measure (l : List (Ty × Ty)) : Nat × Nat :=
   ((l.map tyvars_constraint).join.eraseDup.length, (l.map symbols_constraint).join.eraseDup.length)
 
-mutual
-  def unify (l : List (Ty × Ty)) : Option (List (Var × Ty)) :=
-    match l with
-    | [] => some []
-    | (Ty.var x, t) :: l' => if h : occurs x t
-      then none
-      else Option.map (fun l => (x, t) :: l) (unify (l'.map (subs_constraint x t)))
-    | (t, Ty.var x) :: l' => unify ((Ty.var x, t) :: l')
-    | (Ty.con s, Ty.con s') :: l' => if s = s' then unify l' else none
-    | (Ty.arr t1 t2, Ty.arr t1' t2') :: l' => unify ((t1, t1') :: (t2, t2') :: l')
-    | _ => none
-end
+def unify : List (Ty × Ty) →  Option (List (Var × Ty))
+  | [] => some []
+  | (Ty.var x, t) :: l' => if h : occurs x t
+    then none
+    else Option.map (fun l => (x, t) :: l) (unify (l'.map (subs_constraint x t)))
+  | (t, Ty.var x) :: l' => unify ((Ty.var x, t) :: l')
+  | (Ty.con s, Ty.con s') :: l' => if s = s' then unify l' else none
+  | (Ty.arr t1 t2, Ty.arr t1' t2') :: l' => unify ((t1, t1') :: (t2, t2') :: l')
+  | _ => none
 termination_by
   unify l => unify_measure l
 decreasing_by
   simp_wf
   apply Prod.Lex.left
   simp
+  simp at h
+  have x_notin_t := not_occurs h
+  have h1 := notin_subs_applied l' x_notin_t
   sorry
