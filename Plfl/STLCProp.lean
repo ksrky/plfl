@@ -89,12 +89,24 @@ theorem progress : ∀ {t τ}, ∅ ⊢ t : τ → Val t ∨ (∃ t', t —⟶ t'
           apply (Exists.intro (if t₁' then t₂ else t₃) (Reduction.ite hstep₁'))
 -- termination_by _ t _ _ => progress_measure t
 
+/-ext : ∀ {Γ Δ}
+  → (∀ {x A}     →         Γ ∋ x ⦂ A →         Δ ∋ x ⦂ A)
+    -----------------------------------------------------
+  → (∀ {x y A B} → Γ , y ⦂ B ∋ x ⦂ A → Δ , y ⦂ B ∋ x ⦂ A)
+ext ρ Z           =  Z
+ext ρ (S x≢y ∋x)  =  S x≢y (ρ ∋x)-/
+def ext : ∀ {Γ Δ}, (∀ {x τ}, Γ ∋ x : τ → Δ ∋ x : τ)
+                  → (∀ {x y τ τ'}, Γ; y : τ' ∋ x : τ → Δ; y : τ' ∋ x : τ)
+  | _, _, _ , _, _, _, _, Lookup.here         => Lookup.here
+  | _, _, ρ , _, _, _, _, Lookup.there xney h => Lookup.there xney (ρ h)
+
 -- Lemma: Weekening
 theorem weakening : ∀ {Γ t τ}, ∅ ⊢ t : τ → Γ ⊢ t : τ := by
   intro Γ t τ ht
   cases ht with
   | var x => contradiction
-  | @app Γ' t₁ t₂ τ₁ τ₂ ht₁ ht₂ => sorry
+  | @app Γ' t₁ t₂ τ₁ τ₂ ht₁ ht₂ =>
+      sorry
   | lam ht => sorry
   | tru => apply Judgement.tru
   | fls => apply Judgement.fls
