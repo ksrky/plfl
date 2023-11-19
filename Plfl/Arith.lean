@@ -1,3 +1,9 @@
+/-
+  Arith: Simple untyped language with boolean and arithmetic operation
+  Refering to "Types and Programming Languages", chap 3
+-/
+
+/- Terms -/
 inductive Tm : Type :=
   | tru : Tm
   | fls : Tm
@@ -6,6 +12,7 @@ inductive Tm : Type :=
   | suc : Tm -> Tm
   | prd : Tm -> Tm
   | iszro : Tm -> Tm
+  deriving Repr
 
 notation "true"  => Tm.tru
 notation "false" => Tm.fls
@@ -15,12 +22,16 @@ prefix:70 "succ " => Tm.suc
 prefix:70 "pred " => Tm.prd
 prefix:70 "iszero " => Tm.iszro
 
+#eval if iszero (pred (succ zero)) then succ zero else zero
+
+/- Values -/
 inductive Val : Tm → Prop :=
   | tru  : Val true
   | fls  : Val false
   | zro : Val zero
   | suc {n} : Val n -> Val (succ n)
 
+/- Evaluation step -/
 inductive Step : Tm → Tm → Prop
   | iftru {t₂ t₃}     : Step (if true then t₂ else t₃) t₂
   | iffls {t₂ t₃}     : Step (if false then t₂ else t₃) t₃
@@ -35,31 +46,28 @@ inductive Step : Tm → Tm → Prop
 
 infix:40 " —→ " => Step
 
-theorem sample : ∀ n, n = m ∧ m = 0 → n = 0
-  | n , ⟨hn, hm⟩ => by rw [hn, hm]
-
-/- Theorem: Decidability of one-step evaluation -/
-theorem dec_one_step : t —→ t' ∧ t —→ t'' → t' = t''
+/- Theorem: Decidability of an evaluation step -/
+theorem dec_eval_step : t —→ t' ∧ t —→ t'' → t' = t''
   | ⟨Step.iftru, Step.iftru⟩ => rfl
   | ⟨Step.iftru, Step.ite _⟩ => by contradiction
   | ⟨Step.iffls, Step.iffls⟩ => rfl
   | ⟨Step.iffls, Step.ite _⟩ => by contradiction
   | ⟨Step.ite _, Step.iftru⟩ => by contradiction
   | ⟨Step.ite _, Step.iffls⟩ => by contradiction
-  | ⟨Step.ite ht₁, Step.ite ht₁'⟩ => by simp [dec_one_step ⟨ht₁, ht₁'⟩]
-  | ⟨Step.suc ht, Step.suc ht'⟩ => by simp [dec_one_step ⟨ht, ht'⟩]
+  | ⟨Step.ite ht₁, Step.ite ht₁'⟩ => by simp [dec_eval_step ⟨ht₁, ht₁'⟩]
+  | ⟨Step.suc ht, Step.suc ht'⟩ => by simp [dec_eval_step ⟨ht, ht'⟩]
   | ⟨Step.prdzro, Step.prdzro⟩ => rfl
   | ⟨Step.prdzro, Step.prd _⟩ => by contradiction
   | ⟨Step.prdsuc, Step.prdsuc⟩ => rfl
-  | ⟨Step.prdsuc, Step.prd ht'⟩ => by sorry
+  | ⟨Step.prdsuc, Step.prd ht'⟩ => sorry
   | ⟨Step.prd ht, Step.prdsuc⟩ => by sorry
-  | ⟨Step.prd ht, Step.prd ht'⟩ => by simp [dec_one_step ⟨ht, ht'⟩]
+  | ⟨Step.prd ht, Step.prd ht'⟩ => by simp [dec_eval_step ⟨ht, ht'⟩]
   | ⟨Step.iszrozro, Step.iszrozro⟩ => rfl
   | ⟨Step.iszrozro, Step.iszro _⟩ => by contradiction
   | ⟨Step.iszrosuc _, Step.iszrosuc _⟩ => rfl
   | ⟨Step.iszrosuc ht, Step.iszro ht'⟩ => by sorry
   | ⟨Step.iszro ht, Step.iszrosuc ht'⟩ => by sorry
-  | ⟨Step.iszro ht, Step.iszro ht'⟩ => by simp [dec_one_step ⟨ht, ht'⟩]
+  | ⟨Step.iszro ht, Step.iszro ht'⟩ => by simp [dec_eval_step ⟨ht, ht'⟩]
 
 /- Definition: Normal form -/
 def is_norm (t : Tm) : Prop := ∀ t', ¬ t —→ t'
@@ -78,19 +86,10 @@ def val_is_norm : ∀ {t}, Val t → is_norm t
           have p' := p t'
           contradiction
 
-def norm_is_val : ∀ {t}, is_norm t → Val t
-  | true , hn => Val.tru
-  | false, hn => Val.fls
-  | Tm.ite t₁ t₂ t₃, hn => by simp [is_norm] at hn; sorry
-  | zero , hn => Val.zro
-  | succ n, hn => Val.suc (norm_is_val (by simp [is_norm] at *; sorry))
-  | pred n, hn => by simp [is_norm] at hn; sorry
-  | iszero n, hn => sorry
-
 /- Definition: Reflexive and transitive closure of Step -/
 inductive Steps : Tm → Tm → Prop
   | single : t —→ t' → Steps t t'
-  | refl   : ∀ t, Steps t t
+  | refl   : ∀ {t}, Steps t t
   | trans  : Steps t t' → Steps t' t'' → Steps t t''
 
 infix:40 " —→* " => Steps
@@ -101,7 +100,7 @@ theorem uniq_norm : t —→* u → t —→* u' → is_norm u → is_norm u' �
   simp [is_norm] at hn hn'
   induction ht generalizing u' with
   | single h => induction ht' generalizing u with
-      | single h' => simp [dec_one_step ⟨h, h'⟩]
+      | single h' => simp [dec_eval_step ⟨h, h'⟩]
       | refl => sorry
       | trans h₁ h₂ => sorry
   | refl => sorry
@@ -111,14 +110,38 @@ theorem uniq_norm : t —→* u → t —→* u' → is_norm u → is_norm u' �
 theorem terminate_steps : ∀ t, ∃ t', is_norm t' ∧ t —→* t' := by
   intro t
   induction t with
-  | tru => sorry
-  | fls => exact ⟨false, Steps.refl _⟩
-  | ite t₁ t₂ t₃ =>
+  | tru =>
+      exists true;
+      apply And.intro (val_is_norm Val.tru) Steps.refl
+  | fls =>
+      exists false;
+      apply And.intro (val_is_norm Val.fls) Steps.refl
+  | ite t₁ t₂ t₃ ht₁ ht₂ ht₃ =>
       induction t₁ with
-      | tru => exact ⟨t₂, Steps.single Step.iftru⟩
-      | fls => exact ⟨t₃, Steps.single Step.iffls⟩
+      | tru => sorry
+      | fls => sorry
       | _ => sorry
-  | zro => exact ⟨zero, Steps.refl _⟩
-  | suc t => sorry
-  | prd t => sorry
-  | iszro t => sorry
+  | zro =>
+      exists zero
+      apply And.intro (val_is_norm Val.zro) Steps.refl
+  | suc t ht =>
+      induction ht with
+      | intro t' ht' =>
+          exists (succ t')
+          apply And.intro
+          case left => sorry
+          case right => sorry
+  | prd t ht =>
+      induction ht with
+      | intro t' ht' =>
+          exists (pred t')
+          apply And.intro
+          case left => sorry
+          case right => sorry
+  | iszro t ht =>
+      induction ht with
+      | intro t' ht' =>
+          exists (iszero t')
+          apply And.intro
+          case left => sorry
+          case right =>  sorry
