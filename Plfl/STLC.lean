@@ -6,7 +6,7 @@ inductive Ty : Type
   | arr : Ty → Ty → Ty
 
 notation "bool" => Ty.bool
-notation:70 τ₁ "⇒" τ₂ => Ty.arr τ₁ τ₂
+infixr:70 " ⇒ " => Ty.arr
 
 -- Decidable equality of types
 instance Ty.decEq : DecidableEq Ty
@@ -29,19 +29,20 @@ inductive Tm : Type
   | fls : Tm
   | ite : Tm → Tm → Tm → Tm
 
-notation "true" => Tm.tru
+notation "true"  => Tm.tru
 notation "false" => Tm.fls
-notation:50 "λ" x ":" τ:80 "⇒" t:50 => Tm.lam x τ t
-notation:70 t₁:70 "⬝" t₂:80 => Tm.app t₁ t₂
-notation "if" t₁ "then" t₂ "else" t₃ => Tm.ite t₁ t₂ t₃
+prefix:90 "% "   => Tm.var
+notation:60 "λ" x ":" τ:71 "⇒" t:60 => Tm.lam x τ t
+infixl:70 " ⬝ "  => Tm.app
+notation:60 "if" t₁ "then" t₂ "else" t₃ => Tm.ite t₁ t₂ t₃
 
 def notB : Tm := if true then false else true
 
 -- Values
 inductive Val : Tm → Prop
   | lam {x τ t} : Val (λ x : τ ⇒ t)
-  | tru : Val Tm.tru
-  | fls : Val Tm.fls
+  | tru : Val true
+  | fls : Val false
 
 -- Substitution
 def subst (x : String) (s : Tm) : Tm → Tm
@@ -65,7 +66,7 @@ inductive Reduction : Tm → Tm → Prop
   | fls {t₁ t₂} : Reduction (if false then t₁ else t₂) t₂
   | ite {t₁ t₁' t₂ t₃} : Reduction t₁ t₁' → Reduction (if t₁ then t₂ else t₃) (if t₁' then t₂ else t₃)
 
-notation:40 t "—⟶" t' => Reduction t t'
+infix:40 " —⟶ " => Reduction
 
 /-
   Context management
@@ -75,28 +76,28 @@ inductive Context : Type
   | cons : Context → String → Ty → Context
 
 notation "∅" => Context.empty
-notation:50 Γ ";" x ":" τ => Context.cons Γ x τ
+notation:50 Γ ";" x ":" τ:50 => Context.cons Γ x τ
 
 inductive Lookup : Context → String → Ty → Prop
   | here {Γ x τ} : Lookup (Γ ; x : τ) x τ
   | there {Γ x y τ τ'} : x ≠ y → Lookup Γ x τ → Lookup (Γ ; y : τ') x τ
 
-notation:40 Γ "∋" x ":" τ => Lookup Γ x τ
+notation:40 Γ "∋" x ":" τ:50 => Lookup Γ x τ
 
 /-
   Typing judgements
 -/
 inductive Judgement : Context → Tm → Ty → Prop
-  | var {Γ x τ} : (Γ ∋ x : τ) → Judgement Γ (Tm.var x) τ
+  | var {Γ x τ} : Γ ∋ x : τ → Judgement Γ (%x) τ
   | app {Γ t₁ t₂ τ τ'} : Judgement Γ t₁ (τ ⇒ τ') → Judgement Γ t₂ τ → Judgement Γ (t₁ ⬝ t₂) τ'
   | lam {Γ x τ t τ'} : Judgement (Γ ; x : τ) t τ' → Judgement Γ (λ x : τ ⇒ t) (τ ⇒ τ')
   | tru {Γ} : Judgement Γ Tm.tru bool
   | fls {Γ} : Judgement Γ Tm.fls bool
   | ite {Γ t₁ t₂ t₃ τ} : Judgement Γ t₁ bool → Judgement Γ t₂ τ → Judgement Γ t₃ τ → Judgement Γ (if t₁ then t₂ else t₃) τ
 
-notation:40 Γ "⊢" t ":" τ => Judgement Γ t τ
+notation:40 Γ "⊢" t ":" τ:50 => Judgement Γ t τ
 
-theorem lookup_is_functional {Γ x τ τ'} : (Γ ∋ x : τ) → (Γ ∋ x : τ') → τ = τ'
+theorem lookup_is_functional {Γ x τ τ'} : Γ ∋ x : τ → Γ ∋ x : τ' → τ = τ'
   | Lookup.here , Lookup.here => rfl
   | Lookup.here , Lookup.there ne _ => False.elim (ne rfl)
   | Lookup.there ne _  , Lookup.here => False.elim (ne rfl)
