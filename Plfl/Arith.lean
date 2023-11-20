@@ -33,16 +33,16 @@ inductive Val : Tm → Prop :=
 
 /- Evaluation step -/
 inductive Step : Tm → Tm → Prop
-  | iftru {t₂ t₃}     : Step (if true then t₂ else t₃) t₂
-  | iffls {t₂ t₃}     : Step (if false then t₂ else t₃) t₃
+  | iftru {t₂ t₃}      : Step (if true then t₂ else t₃) t₂
+  | iffls {t₂ t₃}      : Step (if false then t₂ else t₃) t₃
   | ite {t₁ t₁' t₂ t₃} : Step t₁ t₁' → Step (if t₁ then t₂ else t₃) (if t₁' then t₂ else t₃)
-  | suc {t t'}        : Step t t' → Step (succ t) (succ t')
-  | prdzro            : Step (pred zero) zero
-  | prdsuc {t}        : Step (pred (succ t)) t
-  | prd {t t'}        : Step t t' → Step (pred t) (pred t')
-  | iszrozro          : Step (iszero zero) true
-  | iszrosuc {t}      : Step t zero → Step (iszero (succ t)) false
-  | iszro {t t'}      : Step t t' → Step (iszero t) (iszero t')
+  | suc {t t'}         : Step t t' → Step (succ t) (succ t')
+  | prdzro             : Step (pred zero) zero
+  | prdsuc {t}         : Step (pred (succ t)) t
+  | prd {t t'}         : Step t t' → Step (pred t) (pred t')
+  | iszrozro           : Step (iszero zero) true
+  | iszrosuc {t}       : Step t zero → Step (iszero (succ t)) false
+  | iszro {t t'}       : Step t t' → Step (iszero t) (iszero t')
 
 infix:40 " —→ " => Step
 
@@ -59,14 +59,26 @@ theorem dec_eval_step : t —→ t' ∧ t —→ t'' → t' = t''
   | ⟨Step.prdzro, Step.prdzro⟩ => rfl
   | ⟨Step.prdzro, Step.prd _⟩ => by contradiction
   | ⟨Step.prdsuc, Step.prdsuc⟩ => rfl
-  | ⟨Step.prdsuc, Step.prd ht'⟩ => sorry
-  | ⟨Step.prd ht, Step.prdsuc⟩ => by sorry
+  | ⟨Step.prdsuc, Step.prd ht'⟩ => by
+      have ht' := Step.prd ht'
+      apply @dec_eval_step (pred (succ t'))
+      apply And.intro Step.prdsuc ht'
+  | ⟨Step.prd ht, Step.prdsuc⟩ => by
+      have ht := Step.prd ht
+      apply @dec_eval_step (pred (succ t''))
+      apply And.intro ht Step.prdsuc
   | ⟨Step.prd ht, Step.prd ht'⟩ => by simp [dec_eval_step ⟨ht, ht'⟩]
   | ⟨Step.iszrozro, Step.iszrozro⟩ => rfl
   | ⟨Step.iszrozro, Step.iszro _⟩ => by contradiction
   | ⟨Step.iszrosuc _, Step.iszrosuc _⟩ => rfl
-  | ⟨Step.iszrosuc ht, Step.iszro ht'⟩ => by sorry
-  | ⟨Step.iszro ht, Step.iszrosuc ht'⟩ => by sorry
+  | ⟨Step.iszrosuc ht, Step.iszro ht'⟩ => by
+      have ht' := Step.iszro ht'
+      apply @dec_eval_step (iszero (succ _))
+      apply And.intro (Step.iszrosuc ht) ht'
+  | ⟨Step.iszro ht, Step.iszrosuc ht'⟩ => by
+      have ht := Step.iszro ht
+      apply @dec_eval_step (iszero (succ _))
+      apply And.intro ht (Step.iszrosuc ht')
   | ⟨Step.iszro ht, Step.iszro ht'⟩ => by simp [dec_eval_step ⟨ht, ht'⟩]
 
 /- Definition: Normal form -/
