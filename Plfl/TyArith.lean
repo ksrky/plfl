@@ -41,35 +41,24 @@ theorem inv_pred {t τ} : ⊢ pred t : τ → τ = nat ∧ ⊢ t : nat :=
 theorem inv_iszero : ⊢ iszero t : τ → τ = bool ∧ ⊢ t : nat :=
   by intro h; cases h; apply And.intro rfl; assumption
 
-/- Lemma: Caononical form -/
-theorem canon_bool {t} : Val t → ⊢ t : bool → t = true ∨ t = false
-  | Val.tru,   h => Or.inl rfl
-  | Val.fls,   h => Or.inr rfl
-  | Val.zro,   h => by apply Or.inl; contradiction
-  | Val.suc _, h => by apply Or.inl; contradiction
-
-theorem canon_nat {t} : Val t → ⊢ t : nat → ∃ n, t = n
-  | Val.tru, _ | Val.fls, _ => by contradiction
-  | Val.zro, _ => by exists zero
-  | @Val.suc n' _, _ => by exists (succ n')
-
-theorem progress : ∀ {t τ}, ⊢ t : τ → Val t ∨ (∃ t', t —⟶ t') := by
-  intro t τ h
+/- Theorem: Progress -/
+theorem progress {t τ} : ⊢ t : τ → Val t ∨ (∃ t', t —⟶ t') := by
+  intro h
   cases h with
   | tru => apply Or.inl Val.tru
   | fls => apply Or.inl Val.fls
-  | @ite t₁ t₂ t₃ _ ht₁ ht₂ ht₃ =>
+  | ite ht₁ ht₂ ht₃ =>
       have ht₁' := progress ht₁
       cases ht₁' with
       | inl hv₁ =>
           apply Or.inr
           cases hv₁ with
-          | tru => exists t₂; apply Step.iftru
-          | fls => exists t₃; apply Step.iffls
+          | tru => apply Exists.intro _ Step.iftru
+          | fls => apply Exists.intro _ Step.iffls
           | zro | suc _ => contradiction
       | inr hstep₁ =>
           apply Or.inr; have ⟨t₁', hstep₁'⟩ := hstep₁
-          exists if t₁' then t₂ else t₃; apply Step.ite hstep₁'
+          apply Exists.intro _ (Step.ite hstep₁')
   | zro => apply Or.inl Val.zro
   | suc ht =>
       have ht' := progress ht
@@ -103,3 +92,27 @@ theorem progress : ∀ {t τ}, ⊢ t : τ → Val t ∨ (∃ t', t —⟶ t') :=
       | inr hstep =>
           apply Or.inr; have ⟨u, hstep'⟩ := hstep
           exists (iszero u); apply Step.iszro hstep'
+
+/- Theorem: Preservation -/
+theorem preservation {t t' τ} : ⊢ t : τ → t —⟶ t' → ⊢ t' : τ
+  | Typing.tru, _ | Typing.fls, _ => by contradiction
+  | Typing.ite ht₁ ht₂ ht₃ , h => by
+      cases h with
+      | iftru | iffls => assumption
+      | ite h' =>
+          have ht₁' := preservation ht₁ h'
+          apply Typing.ite ht₁' ht₂ ht₃
+  | Typing.zro, h => by contradiction
+  | Typing.suc ht, h => by
+      cases h with
+      | suc h' => have ht' := preservation ht h'; apply Typing.suc ht'
+  | Typing.prd ht, h => by
+      cases h with
+      | prdzro => assumption
+      | prdsuc h' => have ht' := inv_succ ht; apply ht'.right
+      | prd h' => have ht' := preservation ht h'; apply Typing.prd ht'
+  | Typing.iszro ht, h => by
+      cases h with
+      | iszrozro => apply Typing.tru
+      | iszrosuc => apply Typing.fls
+      | iszro h' => have ht' := preservation ht h'; apply Typing.iszro ht'

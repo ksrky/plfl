@@ -1,6 +1,6 @@
 /-
   Arith: Simple untyped language with boolean and arithmetic operation
-  Refering to "Types and Programming Languages", chap 3
+  Referring to "Types and Programming Languages", chap 3
 -/
 
 /- Terms -/
@@ -65,7 +65,7 @@ theorem val_is_norm : ∀ {t}, Val t → is_norm t
   | succ _, Val.suc hv => by
       simp [is_norm]; intros t h;
       cases h with
-      | @suc _ t' h =>
+      | suc h =>
           have hn := val_is_norm hv
           simp [contra_step_norm h hn]
 
@@ -79,20 +79,20 @@ theorem dec_eval_step : t —⟶ t' → t —⟶ t'' → t' = t''
   | Step.prdzro, Step.prdzro => rfl
   | Step.prdzro, Step.prd _ => by contradiction
   | Step.prdsuc _, Step.prdsuc _ => rfl
-  | Step.prdsuc hv, @Step.prd _ u ht' => by
+  | Step.prdsuc hv, Step.prd ht' => by
       have hn := val_is_norm (Val.suc hv)
       apply False.elim (contra_step_norm ht' hn)
-  | @Step.prd _ u ht, Step.prdsuc hv' => by
+  | Step.prd ht, Step.prdsuc hv' => by
       have hn := val_is_norm (Val.suc hv')
       apply False.elim (contra_step_norm ht hn)
   | Step.prd ht, Step.prd ht' => by simp [dec_eval_step ht ht']
   | Step.iszrozro, Step.iszrozro => rfl
   | Step.iszrozro, Step.iszro _ => by contradiction
   | Step.iszrosuc _, Step.iszrosuc _ => rfl
-  | Step.iszrosuc hv, @Step.iszro _ u ht' => by
+  | Step.iszrosuc hv, Step.iszro ht' => by
       have hn := val_is_norm (Val.suc hv)
       apply False.elim (contra_step_norm ht' hn)
-  | @Step.iszro _ u ht, Step.iszrosuc ht' => by
+  | Step.iszro ht, Step.iszrosuc ht' => by
       have hn := val_is_norm (Val.suc ht')
       apply False.elim (contra_step_norm ht hn)
   | Step.iszro ht, Step.iszro ht' => by simp [dec_eval_step ht ht']
@@ -104,6 +104,27 @@ inductive Steps : Tm → Tm → Prop
   | trans  : Steps t t' → Steps t' t'' → Steps t t''
 
 infix:40 " —⟶* " => Steps
+infixr:40 " —⊕⟶ " => Steps.trans
+
+/- Definition: Steps for the simplicity of proofs -/
+inductive Steps' : Tm → Tm → Prop
+  | refl  : ∀ {t}, Steps' t t
+  | trans : Steps' t t' → Step t' t'' → Steps' t t''
+
+infix:40 " —⟶*' " => Steps'
+
+theorem uniq_norm' : t —⟶*' u → t —⟶*' u' → is_norm u → is_norm u' → u = u'
+  | Steps'.refl, Steps'.refl, _, _ => rfl
+  | Steps'.refl, Steps'.trans h₁' h₂', hn, hn' => by
+      apply fun h => dec_eval_step h h₂'
+      sorry
+  | Steps'.trans h₁ h₂, Steps'.refl,hn, hn' => by
+      apply fun h => dec_eval_step h₂ h
+      sorry
+  | Steps'.trans h₁ h₂, Steps'.trans h₁' h₂', hn, hn' => by
+      apply dec_eval_step h₂
+      sorry
+
 
 /- Theorem: Uniqueness of normalform -/
 theorem uniq_norm : t —⟶* u → t —⟶* u' → is_norm u → is_norm u' → u = u'
@@ -117,7 +138,8 @@ theorem uniq_norm : t —⟶* u → t —⟶* u' → is_norm u → is_norm u' �
   | Steps.refl, Steps.single h', hn, _ => by
       apply False.elim (contra_step_norm h' hn)
   | Steps.refl, Steps.refl, _, _ => rfl
-  | Steps.refl, Steps.trans h₁' h₂', hn, hn' => sorry
+  | Steps.refl, Steps.trans h₁' h₂', hn, hn' =>
+      sorry
   | Steps.trans h₁ h₂, Steps.single h', hn, hn' => sorry
   | Steps.trans h₁ h₂, Steps.refl, hn, hn' => sorry
   | Steps.trans h₁ h₂, Steps.trans h₁' h₂', hn, hn' => sorry
@@ -133,31 +155,30 @@ theorem terminate_steps : ∀ t, ∃ t', is_norm t' ∧ t —⟶* t' := by
       | tru =>
           have ⟨t₂', ht₂⟩ := ht₂
           exists t₂'
-          apply And.intro ht₂.left
-          sorry
-      | fls => sorry
+          apply And.intro ht₂.left (Steps.single Step.iftru —⊕⟶ ht₂.right)
+      | fls =>
+          have ⟨t₃', ht₃⟩ := ht₃
+          exists t₃'
+          apply And.intro ht₃.left (Steps.single Step.iffls —⊕⟶ ht₃.right)
       | _ => sorry
   | zro =>
       exists zero
       apply And.intro (val_is_norm Val.zro) Steps.refl
   | suc t ht =>
-      induction ht with
-      | intro t' ht' =>
-          exists (succ t')
-          apply And.intro
-          case left => sorry
-          case right => sorry
+      have ⟨t', ht⟩ := ht
+      exists (iszero t')
+      apply And.intro
+      case left => sorry
+      case right => sorry
   | prd t ht =>
-      induction ht with
-      | intro t' ht' =>
-          exists (pred t')
-          apply And.intro
-          case left => sorry
-          case right => sorry
+      have ⟨t', ht⟩ := ht
+      exists (iszero t')
+      apply And.intro
+      case left => sorry
+      case right => sorry
   | iszro t ht =>
-      induction ht with
-      | intro t' ht' =>
-          exists (iszero t')
-          apply And.intro
-          case left => sorry
-          case right =>  sorry
+      have ⟨t', ht⟩ := ht
+      exists (iszero t')
+      apply And.intro
+      case left => sorry
+      case right =>  sorry
