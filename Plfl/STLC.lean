@@ -53,20 +53,21 @@ def subst (x : String) (s : Tm) : Tm → Tm
   | Tm.fls => false
   | Tm.ite t₁ t₂ t₃ => if subst x s t₁ then subst x s t₂ else subst x s t₃
 
-notation:90 t "[" x "↦" s "]" => subst x s t
+notation:90 "[" x "↦" s "]" t:80 => subst x s t
 
 /-
-  Reduction
+  Evaluation step
 -/
-inductive Reduction : Tm → Tm → Prop
-  | app_abs {x τ t v} : Val v → Reduction ((λ x : τ ⇒ t) ⬝ v) (t [x ↦ v])
-  | app₁ {t₁ t₁' t₂} : Reduction t₁ t₁' → Reduction (t₁ ⬝ t₂) (t₁' ⬝ t₂)
-  | app₂ {v₁ t₂ t₂'} : Val v₁ → Reduction t₂ t₂' → Reduction (v₁ ⬝ t₂) (v₁ ⬝ t₂')
-  | tru {t₁ t₂} : Reduction (if true then t₁ else t₂) t₁
-  | fls {t₁ t₂} : Reduction (if false then t₁ else t₂) t₂
-  | ite {t₁ t₁' t₂ t₃} : Reduction t₁ t₁' → Reduction (if t₁ then t₂ else t₃) (if t₁' then t₂ else t₃)
+inductive Step : Tm → Tm → Prop
+  | app_abs {x τ t v} : Val v → Step ((λ x : τ ⇒ t) ⬝ v) ([x ↦ v] t)
+  | app₁ {t₁ t₁' t₂} : Step t₁ t₁' → Step (t₁ ⬝ t₂) (t₁' ⬝ t₂)
+  | app₂ {v₁ t₂ t₂'} : Val v₁ → Step t₂ t₂' → Step (v₁ ⬝ t₂) (v₁ ⬝ t₂')
+  | iftru {t₁ t₂} : Step (if true then t₁ else t₂) t₁
+  | iffls {t₁ t₂} : Step (if false then t₁ else t₂) t₂
+  | ite {t₁ t₁' t₂ t₃} : Step t₁ t₁' →
+                          Step (if t₁ then t₂ else t₃) (if t₁' then t₂ else t₃)
 
-infix:40 " —⟶ " => Reduction
+infix:40 " —⟶ " => Step
 
 /-
   Context management
@@ -76,7 +77,7 @@ inductive Context : Type
   | cons : Context → String → Ty → Context
 
 notation "∅" => Context.empty
-notation:50 Γ ";" x ":" τ:50 => Context.cons Γ x τ
+notation:40 Γ ";" x ":" τ:50 => Context.cons Γ x τ
 
 inductive Lookup : Context → String → Ty → Prop
   | here {Γ x τ} : Lookup (Γ ; x : τ) x τ
@@ -84,18 +85,18 @@ inductive Lookup : Context → String → Ty → Prop
 
 notation:40 Γ "∋" x ":" τ:50 => Lookup Γ x τ
 
-/-
-  Typing judgements
--/
-inductive Judgement : Context → Tm → Ty → Prop
-  | var {Γ x τ} : Γ ∋ x : τ → Judgement Γ (%x) τ
-  | app {Γ t₁ t₂ τ τ'} : Judgement Γ t₁ (τ ⇒ τ') → Judgement Γ t₂ τ → Judgement Γ (t₁ ⬝ t₂) τ'
-  | lam {Γ x τ t τ'} : Judgement (Γ ; x : τ) t τ' → Judgement Γ (λ x : τ ⇒ t) (τ ⇒ τ')
-  | tru {Γ} : Judgement Γ Tm.tru bool
-  | fls {Γ} : Judgement Γ Tm.fls bool
-  | ite {Γ t₁ t₂ t₃ τ} : Judgement Γ t₁ bool → Judgement Γ t₂ τ → Judgement Γ t₃ τ → Judgement Γ (if t₁ then t₂ else t₃) τ
+/- Typing judgements -/
+inductive Typing : Context → Tm → Ty → Prop
+  | var {Γ x τ} : Γ ∋ x : τ → Typing Γ (%x) τ
+  | app {Γ t₁ t₂ τ τ'} : Typing Γ t₁ (τ ⇒ τ') → Typing Γ t₂ τ →
+                          Typing Γ (t₁ ⬝ t₂) τ'
+  | lam {Γ x τ t τ'} : Typing (Γ ; x : τ) t τ' → Typing Γ (λ x : τ ⇒ t) (τ ⇒ τ')
+  | tru {Γ} : Typing Γ Tm.tru bool
+  | fls {Γ} : Typing Γ Tm.fls bool
+  | ite {Γ t₁ t₂ t₃ τ} : Typing Γ t₁ bool → Typing Γ t₂ τ → Typing Γ t₃ τ →
+                          Typing Γ (if t₁ then t₂ else t₃) τ
 
-notation:40 Γ "⊢" t ":" τ:50 => Judgement Γ t τ
+notation:40 Γ "⊢" t ":" τ:50 => Typing Γ t τ
 
 theorem lookup_is_functional {Γ x τ τ'} : Γ ∋ x : τ → Γ ∋ x : τ' → τ = τ'
   | Lookup.here , Lookup.here => rfl
