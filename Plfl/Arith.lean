@@ -69,6 +69,12 @@ theorem val_is_norm : ∀ {t}, Val t → is_norm t
           have hn := val_is_norm hv
           simp [contra_step_norm h hn]
 
+/- Lemma: Induction with normal form -/
+theorem norm_suc {t} : is_norm t → is_norm (succ t)
+  | hn => by
+      simp [is_norm]; intros t' h;
+      cases h; apply hn; assumption
+
 /- Theorem: Decidability of each evaluation step -/
 theorem dec_eval_step : t —⟶ t' → t —⟶ t'' → t' = t''
   | Step.iftru, Step.iftru | Step.iffls, Step.iffls => rfl
@@ -104,30 +110,35 @@ inductive Steps : Tm → Tm → Prop
   | trans  : Steps t t' → Steps t' t'' → Steps t t''
 
 infix:40 " —⟶* " => Steps
-infixr:40 " —⊕⟶ " => Steps.trans
 
 /- Definition: Steps for the simplicity of proofs -/
-inductive Steps' : Tm → Tm → Prop
-  | refl  : ∀ {t}, Steps' t t
-  | trans : Steps' t t' → Step t' t'' → Steps' t t''
+inductive Steps' : Tm → Tm → Type
+  | refl {t}         : Val t → Steps' t t
+  | trans {t t' t''} : Step t t' → Steps' t' t'' → Steps' t t''
 
 infix:40 " —⟶*' " => Steps'
 
-theorem uniq_norm' : t —⟶*' u → t —⟶*' u' → is_norm u → is_norm u' → u = u'
-  | Steps'.refl, Steps'.refl, _, _ => rfl
-  | Steps'.refl, Steps'.trans h₁' h₂', hn, hn' => by
-      apply fun h => dec_eval_step h h₂'
-      sorry
-  | Steps'.trans h₁ h₂, Steps'.refl,hn, hn' => by
-      apply fun h => dec_eval_step h₂ h
-      sorry
-  | Steps'.trans h₁ h₂, Steps'.trans h₁' h₂', hn, hn' => by
-      apply dec_eval_step h₂
-      sorry
+theorem uniq_norm' : t —⟶*' u → t —⟶*' u' → u = u'
+  | Steps'.refl _, Steps'.refl _ => rfl
+  | Steps'.refl hv, @Steps'.trans _ t' _ h₁' h₂' => by
+      have hn := val_is_norm hv
+      simp [is_norm] at hn
+      have hn := hn t'
+      contradiction
+  | @Steps'.trans _ t' _  h₁ h₂, Steps'.refl hv' => by
+      have hn := val_is_norm hv'
+      simp [is_norm] at hn
+      have hn := hn t'
+      contradiction
+  | Steps'.trans h₁ h₂, Steps'.trans h₁' h₂' => by
+      have h := dec_eval_step h₁ h₁'
+      rw [h] at h₂
+      exact uniq_norm' h₂ h₂'
 
+/- Simulate Steps by Steps' -/
 
 /- Theorem: Uniqueness of normalform -/
-theorem uniq_norm : t —⟶* u → t —⟶* u' → is_norm u → is_norm u' → u = u'
+/- theorem uniq_norm : t —⟶* u → t —⟶* u' → is_norm u → is_norm u' → u = u'
   | Steps.single h, Steps.single h', _, _ => by
       simp [dec_eval_step h h']
   | Steps.single h, Steps.refl, _, hn' => by
@@ -138,9 +149,12 @@ theorem uniq_norm : t —⟶* u → t —⟶* u' → is_norm u → is_norm u' �
   | Steps.refl, Steps.single h', hn, _ => by
       apply False.elim (contra_step_norm h' hn)
   | Steps.refl, Steps.refl, _, _ => rfl
-  | Steps.refl, Steps.trans h₁' h₂', hn, hn' =>
+  | Steps.refl, Steps.trans h₁' h₂', hn, hn' => by
+
       sorry
-  | Steps.trans h₁ h₂, Steps.single h', hn, hn' => sorry
+  | Steps.trans h₁ h₂, Steps.single h', hn, hn' => by
+      apply fun h => dec_eval_step h h'
+      sorry
   | Steps.trans h₁ h₂, Steps.refl, hn, hn' => sorry
   | Steps.trans h₁ h₂, Steps.trans h₁' h₂', hn, hn' => sorry
 
@@ -166,13 +180,13 @@ theorem terminate_steps : ∀ t, ∃ t', is_norm t' ∧ t —⟶* t' := by
       apply And.intro (val_is_norm Val.zro) Steps.refl
   | suc t ht =>
       have ⟨t', ht⟩ := ht
-      exists (iszero t')
+      exists (succ t')
       apply And.intro
-      case left => sorry
+      case left => apply norm_suc ht.left
       case right => sorry
   | prd t ht =>
       have ⟨t', ht⟩ := ht
-      exists (iszero t')
+      exists (pred t')
       apply And.intro
       case left => sorry
       case right => sorry
@@ -181,4 +195,4 @@ theorem terminate_steps : ∀ t, ∃ t', is_norm t' ∧ t —⟶* t' := by
       exists (iszero t')
       apply And.intro
       case left => sorry
-      case right =>  sorry
+      case right =>  sorry -/
