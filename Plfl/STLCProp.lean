@@ -34,7 +34,7 @@ theorem canonical_forms_lam
 /- Theorem: Progress -/
 theorem progress {t τ} : ∅ ⊢ t : τ → Val t ∨ (∃ t', t —⟶ t')
   | Typing.var x => by contradiction
-  | @Typing.app _ t₁ t₂ τ₁ _ ht₁ ht₂ => by
+  | Typing.app ht₁ ht₂ => by
       have ht₁' := progress ht₁
       cases ht₁' with
       | inl hv₁ =>
@@ -43,20 +43,17 @@ theorem progress {t τ} : ∅ ⊢ t : τ → Val t ∨ (∃ t', t —⟶ t')
           | inl hv₂ =>
               apply Or.inr
               cases hv₁ with
-              | @lam x _ t =>
-                  exists [x ↦ t₂] t
-                  apply (Step.app_abs hv₂)
+              | lam =>
+                  apply Exists.intro _ (Step.app_abs hv₂)
               | tru | fls => cases ht₁
           | inr hstep₂ =>
               apply Or.inr
               have ⟨t₂', hstep₂'⟩ := hstep₂
-              exists t₁ ⬝ t₂'
-              apply (Step.app₂ hv₁ hstep₂')
+              apply Exists.intro _ (Step.app₂ hv₁ hstep₂')
       | inr hstep₁ =>
           apply Or.inr
           have ⟨t₁', hstep₁'⟩ := hstep₁
-          exists t₁' ⬝ t₂
-          apply (Step.app₁ hstep₁')
+          apply Exists.intro _ (Step.app₁ hstep₁')
   | Typing.lam ht => by apply Or.inl Val.lam
   | Typing.tru => by apply Or.inl Val.tru
   | Typing.fls => by apply Or.inl Val.fls
@@ -74,7 +71,7 @@ theorem progress {t τ} : ∅ ⊢ t : τ → Val t ∨ (∃ t', t —⟶ t')
           have ⟨t₁', hstep₁'⟩ := hstep₁
           apply Exists.intro _ (Step.ite hstep₁')
 
-/- Lemma: Extending -/
+/- Lemma: Extension -/
 theorem extend {Γ Δ} : (∀ {x τ}, Γ ∋ x : τ → Δ ∋ x : τ)
   → (∀ {x y τ τ'}, Γ; y : τ' ∋ x : τ → Δ; y : τ' ∋ x : τ) := by
     intros ρ x y τ τ' hxy
@@ -82,64 +79,93 @@ theorem extend {Γ Δ} : (∀ {x τ}, Γ ∋ x : τ → Δ ∋ x : τ)
     | here => apply Lookup.here
     | there xney h => apply Lookup.there xney (ρ h)
 
-/- Permutation -/
-theorem permutation {Γ x y τ₁ τ₂ t τ} :
-  Γ; x:τ₁; y:τ₂ ⊢ t : τ → Γ; y:τ₂; x:τ₁ ⊢ t : τ
-    | Typing.var h => by
-        cases h with
-        | here => sorry
-        | there xney h => sorry
-    | Typing.app ht₁ ht₂ => Typing.app (permutation ht₁) (permutation ht₂)
-    | Typing.lam ht => sorry
-    | Typing.tru => Typing.tru
-    | Typing.fls => Typing.fls
-    | Typing.ite ht₁ ht₂ ht₃ =>
-        Typing.ite (permutation ht₁) (permutation ht₂) (permutation ht₃)
+/- Lemma: Renaming -/
+theorem rename {Γ Δ} : (∀ {x τ}, Γ ∋ x : τ → Δ ∋ x : τ)
+  → (∀ {t τ}, Γ ⊢ t : τ → Δ ⊢ t : τ)
+  | ρ, _, _, Typing.var hx => Typing.var (ρ hx)
+  | ρ, _, _, Typing.app ht₁ ht₂ => Typing.app (rename ρ ht₁) (rename ρ ht₂)
+  | ρ, _, _, Typing.lam ht => Typing.lam (rename (extend ρ) ht)
+  | _, _, _, Typing.tru => Typing.tru
+  | _, _, _, Typing.fls => Typing.fls
+  | ρ, _, _, Typing.ite ht₁ ht₂ ht₃ =>
+              Typing.ite (rename ρ ht₁) (rename ρ ht₂) (rename ρ ht₃)
 
 /- Lemma: Weekening -/
-theorem weakening {Γ t τ}: ∅ ⊢ t : τ → Γ ⊢ t : τ
-  | Typing.var x => by contradiction
-  | Typing.app ht₁ ht₂ => Typing.app (weakening ht₁) (weakening ht₂)
-  | Typing.lam ht => by
-      apply Typing.lam
-      sorry
-  | Typing.tru => Typing.tru
-  | Typing.fls => Typing.fls
-  | Typing.ite ht₁ ht₂ ht₃ =>
-      Typing.ite (weakening ht₁) (weakening ht₂) (weakening ht₃)
+theorem weaken {Γ t τ} : ∅ ⊢ t : τ → Γ ⊢ t : τ := rename ρ
+  where
+    ρ : ∀ {x τ}, ∅ ∋ x : τ → Γ ∋ x : τ := by
+      intros
+      contradiction
+
+theorem drop {Γ x τ₁ τ₂ τ₃} : Γ; x : τ₁; x : τ₂ ⊢ t : τ₃ → Γ; x : τ₂ ⊢ t : τ₃
+  := rename ρ
+  where
+    ρ : ∀ {y τ₃}, Γ; x : τ₁; x : τ₂ ∋ y : τ₃ → Γ; x : τ₂ ∋ y : τ₃ := by
+      intros y τ₃ hxy
+      cases hxy with
+      | here => apply Lookup.here
+      | there xney hy =>
+          apply Lookup.there xney
+          cases hy with
+          | here => contradiction
+          | there => assumption
+
+theorem swap {Γ x y τ₁ τ₂ τ₃} (ynex : y ≠ x) : Γ; y : τ₂; x : τ₁ ⊢ t : τ₃
+  → Γ; x : τ₁; y : τ₂ ⊢ t : τ₃ := rename ρ
+  where
+    ρ : ∀ {z τ₃}, Γ; y : τ₂; x : τ₁ ∋ z : τ₃ → Γ; x : τ₁; y : τ₂ ∋ z : τ₃ := by
+      intros z τ₃ hyx
+      cases hyx with
+      | here => apply Lookup.there (Ne.symm ynex) Lookup.here
+      | there znex hy =>
+          cases hy with
+          | here => apply Lookup.here
+          | there zney =>
+              apply Lookup.there zney
+              apply Lookup.there znex
+              assumption
 
 /- Lemma: Preservation of types under substitution -/
-theorem subst_preservation {Γ x t v τ₁ τ₂} :
+theorem subst_preserve {Γ x t v τ₁ τ₂} :
   ∅ ⊢ v : τ₁ → Γ; x : τ₁ ⊢ t : τ₂ → Γ ⊢ [x ↦ v] t : τ₂ := by
     intros hv ht
     cases ht with
     | @var _ y _ hy => cases hy with
-      | here => simp [subst]; apply weakening hv
+      | here => simp [subst]; apply weaken hv
       | there xney hy' =>
           simp [subst]; split;
           case inl => simp [*] at xney
           case inr => apply Typing.var hy'
     | app ht₁ ht₂ =>
-        have ht₁' := subst_preservation hv ht₁
-        have ht₂' := subst_preservation hv ht₂
+        have ht₁' := subst_preserve hv ht₁
+        have ht₂' := subst_preserve hv ht₂
         apply Typing.app ht₁' ht₂'
-    | lam ht =>
-        sorry
+    | @lam _ y _ _ _ ht' =>
+        apply Typing.lam
+        split
+        case inl xeqy => simp [xeqy] at *; apply drop ht'
+        case inr xney => apply subst_preserve hv (swap xney ht')
     | tru => apply Typing.tru
     | fls => apply Typing.fls
-    | ite ht₁ ht₂ ht₃ => sorry
+    | ite ht₁ ht₂ ht₃ =>
+        have ht₁' := subst_preserve hv ht₁
+        have ht₂' := subst_preserve hv ht₂
+        have ht₃' := subst_preserve hv ht₃
+        apply Typing.ite ht₁' ht₂' ht₃'
 
 /-
   Theorem: Preservation of types
   If Γ ⊢ t : τ and t —⟶ t', then Γ ⊢ t' : τ.
 -/
-theorem preservation {t t' τ} : ∅ ⊢ t : τ → t —⟶ t' → ∅ ⊢ t' : τ
+theorem preserve {t t' τ} : ∅ ⊢ t : τ → t —⟶ t' → ∅ ⊢ t' : τ
   | Typing.var x, h => by contradiction
   | Typing.app ht₁ ht₂, h => by
       cases h with
-      | app_abs hv => sorry
-      | app₁ ht₁' => sorry
-      | app₂ hv₁ ht₂' => sorry
+      | app_abs _ =>
+        cases ht₁ with
+        | lam ht => apply subst_preserve ht₂ ht
+      | app₁ ht₁' => apply Typing.app (preserve ht₁ ht₁') ht₂
+      | app₂ hv₁ ht₂' => apply Typing.app ht₁ (preserve ht₂ ht₂')
   | Typing.lam ht, h => by contradiction
   | Typing.tru, h => by contradiction
   | Typing.fls, h => by contradiction
@@ -147,5 +173,5 @@ theorem preservation {t t' τ} : ∅ ⊢ t : τ → t —⟶ t' → ∅ ⊢ t' :
       cases h with
       | iftru | iffls => assumption
       | ite h' =>
-          have ht₁' := preservation ht₁ h'
+          have ht₁' := preserve ht₁ h'
           apply Typing.ite ht₁' ht₂ ht₃

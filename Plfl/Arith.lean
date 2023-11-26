@@ -135,64 +135,12 @@ theorem uniq_norm' : t —⟶*' u → t —⟶*' u' → u = u'
       rw [h] at h₂
       exact uniq_norm' h₂ h₂'
 
-/- Simulate Steps by Steps' -/
+/-
+TODO: Simulate Steps by Steps'
+Defintion of Step (original definition of reflexive and transitive closure) is
+not suitable for induction. So we define Steps' for the simplicity of proofs,
+and then simulate the proof of Steps by Steps'.
+might be helpful: https://plfa.inf.ed.ac.uk/Bisimulation/
+-/
 
-/- Theorem: Uniqueness of normalform -/
-/- theorem uniq_norm : t —⟶* u → t —⟶* u' → is_norm u → is_norm u' → u = u'
-  | Steps.single h, Steps.single h', _, _ => by
-      simp [dec_eval_step h h']
-  | Steps.single h, Steps.refl, _, hn' => by
-      apply False.elim (contra_step_norm h hn')
-  | Steps.single h, Steps.trans h₁ h₂, hn, hn' => by
-      apply dec_eval_step h
-      sorry
-  | Steps.refl, Steps.single h', hn, _ => by
-      apply False.elim (contra_step_norm h' hn)
-  | Steps.refl, Steps.refl, _, _ => rfl
-  | Steps.refl, Steps.trans h₁' h₂', hn, hn' => by
-
-      sorry
-  | Steps.trans h₁ h₂, Steps.single h', hn, hn' => by
-      apply fun h => dec_eval_step h h'
-      sorry
-  | Steps.trans h₁ h₂, Steps.refl, hn, hn' => sorry
-  | Steps.trans h₁ h₂, Steps.trans h₁' h₂', hn, hn' => sorry
-
-/- Theorem: Termination of evaluation -/
-theorem terminate_steps : ∀ t, ∃ t', is_norm t' ∧ t —⟶* t' := by
-  intro t
-  induction t with
-  | tru => exists true; apply And.intro (val_is_norm Val.tru) Steps.refl
-  | fls => exists false; apply And.intro (val_is_norm Val.fls) Steps.refl
-  | ite t₁ t₂ t₃ ht₁ ht₂ ht₃ =>
-      induction t₁ with
-      | tru =>
-          have ⟨t₂', ht₂⟩ := ht₂
-          exists t₂'
-          apply And.intro ht₂.left (Steps.single Step.iftru —⊕⟶ ht₂.right)
-      | fls =>
-          have ⟨t₃', ht₃⟩ := ht₃
-          exists t₃'
-          apply And.intro ht₃.left (Steps.single Step.iffls —⊕⟶ ht₃.right)
-      | _ => sorry
-  | zro =>
-      exists zero
-      apply And.intro (val_is_norm Val.zro) Steps.refl
-  | suc t ht =>
-      have ⟨t', ht⟩ := ht
-      exists (succ t')
-      apply And.intro
-      case left => apply norm_suc ht.left
-      case right => sorry
-  | prd t ht =>
-      have ⟨t', ht⟩ := ht
-      exists (pred t')
-      apply And.intro
-      case left => sorry
-      case right => sorry
-  | iszro t ht =>
-      have ⟨t', ht⟩ := ht
-      exists (iszero t')
-      apply And.intro
-      case left => sorry
-      case right =>  sorry -/
+theorem SimSteps {t t'} : t —⟶* t' → t —⟶*' t' → Type := sorry
