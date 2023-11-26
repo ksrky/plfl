@@ -90,7 +90,7 @@ theorem rename {Γ Δ} : (∀ {x τ}, Γ ∋ x : τ → Δ ∋ x : τ)
   | ρ, _, _, Typing.ite ht₁ ht₂ ht₃ =>
               Typing.ite (rename ρ ht₁) (rename ρ ht₂) (rename ρ ht₃)
 
-/- Lemma: Weekening -/
+/- Lemma: Weakening -/
 theorem weaken {Γ t τ} : ∅ ⊢ t : τ → Γ ⊢ t : τ := rename ρ
   where
     ρ : ∀ {x τ}, ∅ ∋ x : τ → Γ ∋ x : τ := by
@@ -155,7 +155,7 @@ theorem subst_preserve {Γ x t v τ₁ τ₂} :
 
 /-
   Theorem: Preservation of types
-  If Γ ⊢ t : τ and t —⟶ t', then Γ ⊢ t' : τ.
+  If ∅ ⊢ t : τ and t —⟶ t', then ∅ ⊢ t' : τ.
 -/
 theorem preserve {t t' τ} : ∅ ⊢ t : τ → t —⟶ t' → ∅ ⊢ t' : τ
   | Typing.var x, h => by contradiction
@@ -175,3 +175,4 @@ theorem preserve {t t' τ} : ∅ ⊢ t : τ → t —⟶ t' → ∅ ⊢ t' : τ
       | ite h' =>
           have ht₁' := preserve ht₁ h'
           apply Typing.ite ht₁' ht₂ ht₃
+

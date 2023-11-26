@@ -76,71 +76,56 @@ theorem norm_suc {t} : is_norm t → is_norm (succ t)
       cases h; apply hn; assumption
 
 /- Theorem: Decidability of each evaluation step -/
-theorem dec_eval_step : t —⟶ t' → t —⟶ t'' → t' = t''
+theorem step_is_decidable : t —⟶ t' → t —⟶ t'' → t' = t''
   | Step.iftru, Step.iftru | Step.iffls, Step.iffls => rfl
   | Step.iftru, Step.ite _ | Step.iffls, Step.ite _
   | Step.ite _, Step.iftru | Step.ite _, Step.iffls => by contradiction
-  | Step.ite ht₁, Step.ite ht₁' => by simp [dec_eval_step ht₁ ht₁']
-  | Step.suc ht, Step.suc ht' => by simp [dec_eval_step ht ht']
+  | Step.ite ht₁, Step.ite ht₁' => by simp [step_is_decidable ht₁ ht₁']
+  | Step.suc ht, Step.suc ht' => by simp [step_is_decidable ht ht']
   | Step.prdzro, Step.prdzro => rfl
   | Step.prdzro, Step.prd _ => by contradiction
   | Step.prdsuc _, Step.prdsuc _ => rfl
-  | Step.prdsuc hv, Step.prd ht' => by
+  | Step.prdsuc hv, Step.prd ht
+  | Step.prd ht, Step.prdsuc hv => by
       have hn := val_is_norm (Val.suc hv)
-      apply False.elim (contra_step_norm ht' hn)
-  | Step.prd ht, Step.prdsuc hv' => by
-      have hn := val_is_norm (Val.suc hv')
       apply False.elim (contra_step_norm ht hn)
-  | Step.prd ht, Step.prd ht' => by simp [dec_eval_step ht ht']
+  | Step.prd ht, Step.prd ht' => by simp [step_is_decidable ht ht']
   | Step.iszrozro, Step.iszrozro => rfl
   | Step.iszrozro, Step.iszro _ => by contradiction
   | Step.iszrosuc _, Step.iszrosuc _ => rfl
-  | Step.iszrosuc hv, Step.iszro ht' => by
+  | Step.iszrosuc hv, Step.iszro ht
+  | Step.iszro ht, Step.iszrosuc hv => by
       have hn := val_is_norm (Val.suc hv)
-      apply False.elim (contra_step_norm ht' hn)
-  | Step.iszro ht, Step.iszrosuc ht' => by
-      have hn := val_is_norm (Val.suc ht')
       apply False.elim (contra_step_norm ht hn)
-  | Step.iszro ht, Step.iszro ht' => by simp [dec_eval_step ht ht']
+  | Step.iszro ht, Step.iszro ht' => by simp [step_is_decidable ht ht']
 
 /- Definition: Reflexive and transitive closure of Step -/
+inductive Steps : Tm → Tm → Prop
+  | refl {t}        : Steps t t
+  | step {t t' t''} : Step t t' → Steps t' t'' → Steps t t''
+
+infix:40 " —⟶* " => Steps
+
+theorem uniq_norm : t —⟶* u → t —⟶* u' → is_norm u → is_norm u' → u = u'
+  | Steps.refl, Steps.refl, _, _ => rfl
+  | Steps.refl, @Steps.step _ t' _ _ _, hn, _
+  | @Steps.step _ t' _  _ _, Steps.refl, _, hn => by
+      simp [is_norm] at hn
+      have hn := hn t'
+      contradiction
+  | Steps.step h₁ h₂, Steps.step h₁' h₂', hn, hn' =>
+      let h := step_is_decidable h₁ h₁'
+      uniq_norm (h ▸ h₂) h₂' hn hn'
+
+def terminate_steps {t} : ∃ t', t —⟶* t' := sorry
+
+/-
+TODO: Simulate the original definition of reflective and transitive closure by Steps
+
 inductive Steps : Tm → Tm → Prop
   | single : t —⟶ t' → Steps t t'
   | refl   : ∀ {t}, Steps t t
   | trans  : Steps t t' → Steps t' t'' → Steps t t''
 
-infix:40 " —⟶* " => Steps
-
-/- Definition: Steps for the simplicity of proofs -/
-inductive Steps' : Tm → Tm → Type
-  | refl {t}         : Val t → Steps' t t
-  | trans {t t' t''} : Step t t' → Steps' t' t'' → Steps' t t''
-
-infix:40 " —⟶*' " => Steps'
-
-theorem uniq_norm' : t —⟶*' u → t —⟶*' u' → u = u'
-  | Steps'.refl _, Steps'.refl _ => rfl
-  | Steps'.refl hv, @Steps'.trans _ t' _ h₁' h₂' => by
-      have hn := val_is_norm hv
-      simp [is_norm] at hn
-      have hn := hn t'
-      contradiction
-  | @Steps'.trans _ t' _  h₁ h₂, Steps'.refl hv' => by
-      have hn := val_is_norm hv'
-      simp [is_norm] at hn
-      have hn := hn t'
-      contradiction
-  | Steps'.trans h₁ h₂, Steps'.trans h₁' h₂' => by
-      have h := dec_eval_step h₁ h₁'
-      rw [h] at h₂
-      exact uniq_norm' h₂ h₂'
-
-/-
-TODO: Simulate Steps by Steps'
-Defintion of Step (original definition of reflexive and transitive closure) is
-not suitable for induction. So we define Steps' for the simplicity of proofs,
-and then simulate the proof of Steps by Steps'.
 might be helpful: https://plfa.inf.ed.ac.uk/Bisimulation/
 -/
-
-theorem SimSteps {t t'} : t —⟶* t' → t —⟶*' t' → Type := sorry
