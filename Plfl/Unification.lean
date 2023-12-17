@@ -1,5 +1,5 @@
 import Mathlib.Data.List.Basic
-import Mathlib.Data.List.Nodup
+import Mathlib.Data.List.Dedup
 
 /- Variables -/
 def Var : Type := Nat
@@ -19,14 +19,16 @@ inductive Ty : Type
   | arr : Ty → Ty → Ty
 
 /- Substitution -/
-def subs (x : Var) (t t' : Ty) : Ty :=
+def subst (x : Var) (t t' : Ty) : Ty :=
   match t' with
   | Ty.var v => if x = v then t else t'
   | Ty.con _ => t'
-  | Ty.arr t1 t2 => Ty.arr (subs x t t1) (subs x t t2)
+  | Ty.arr t1 t2 => Ty.arr (subst x t t1) (subst x t t2)
+
+notation:90 "[" x "↦" t "]" t':50 => subst x t t'
 
 def subs_constraint (x : Var) (t : Ty) : Ty × Ty -> Ty × Ty
-  | (t1, t2) => (subs x t t1, subs x t t2)
+  | (t1, t2) => ([x ↦ t] t1, [x ↦ t] t2)
 
 /- Getting type variables from type -/
 def tyvars : Ty → List Var
@@ -38,17 +40,17 @@ def tyvars_constraint : Ty × Ty -> List Var
   | (t1, t2) => tyvars t1 ++ tyvars t2
 
 theorem notin_subs {x : Var} {t : Ty} (t' : Ty) (x_notin_t : x ∉ tyvars t) :
-  x ∉ tyvars (subs x t t') := by
+  x ∉ tyvars ([x ↦ t] t') := by
     induction t' with
     | var y =>
-        simp [subs]
+        simp [subst]
         split
         exact x_notin_t
         simp [tyvars]
         trivial
-    | con _ => simp [subs, tyvars]
+    | con _ => simp [subst, tyvars]
     | arr t1 t2 ih1 ih2 =>
-        simp [subs, tyvars]
+        simp [subst, tyvars]
         intro h
         cases h with
         | inl h => contradiction
@@ -75,8 +77,7 @@ theorem not_occurs {x : Var} {t : Ty} (h : occurs x t = false) :
     | var y =>
         simp [tyvars]
         intro h1
-        cases h1 with
-        | refl  => simp [occurs] at h
+        simp [h1, occurs] at h
     | con _ => simp [tyvars]
     | arr t1 t2 ih1 ih2 =>
         simp [tyvars]
@@ -95,7 +96,7 @@ theorem notin_subs_applied {x : Var} {t : Ty} (l : List (Ty × Ty)) (x_notin_t :
   x ∉ (l.map (tyvars_constraint ∘ subs_constraint x t)).join := by
     induction l with
     | nil => simp
-    | cons hd tl _ =>
+    | cons hd tl =>
       simp
       intro h
       cases h with
@@ -114,6 +115,14 @@ theorem notin_subs_applied {x : Var} {t : Ty} (l : List (Ty × Ty)) (x_notin_t :
           cases x_in_l with
           | inl h1 => simp [notin_subs a x_notin_t] at h1
           | inr h1 => simp [notin_subs b x_notin_t] at h1
+
+theorem sublemma {l l' : List Var} : (∀ x, x ∈ l → x ∈ l') →
+  l.dedup.length < l'.dedup.length := by
+    intro h
+    induction l with
+    | nil => simp [List.dedup_nil]
+    | cons hd tl htl =>
+        sorry
 
 def unify_measure (l : List (Ty × Ty)) : Nat × Nat :=
   ((l.map tyvars_constraint).join.eraseDup.length, (l.map symbols_constraint).join.eraseDup.length)
@@ -136,4 +145,5 @@ decreasing_by
   simp at h
   have x_notin_t := not_occurs h
   have h1 := notin_subs_applied l' x_notin_t
+  apply sublemma
   sorry

@@ -46,31 +46,25 @@ def count : ∀ {Γ : Context} {n : Nat}, (h : n < Γ.length) → Γ ∋ lookup 
   | Context.cons _ _,     0, _ => Lookup.here
   | Context.cons _ _, _ + 1, h => Lookup.there (count (Nat.lt_of_succ_lt_succ h))
 
-/-
-def ex : ∅ ⊢ (bool ⇒ bool) ⇒ bool ⇒ bool
-  := λ λ (ref 1 · (ref 1 · ref 0))
--/
-
-def lookup_at {Γ : Context} : (n : Nat) → {h : n < Γ.length} → Γ ⊢ lookup h
-  | _ , h => ` count h
+def lookup_at {Γ : Context} (n : Nat) {h : n < Γ.length} : Γ ⊢ lookup h
+  := ` count h
 
 prefix:90 "# " => lookup_at
 
-/- def ex : ∅ ⊢ (bool ⇒ bool) ⇒ bool ⇒ bool :=
-  λ λ (# 1 ⬝ (# 1 ⬝ # 0)) -/
+def ex : ∅ ⊢ (bool ⇒ bool) ⇒ bool ⇒ bool :=
+  λ λ (# 1 ⬝ (# 1 ⬝ # 0))
 
-theorem extend {Γ Δ} : (∀ {τ}, Γ ∋ τ → Δ ∋ τ)
+def extend {Γ Δ} : (∀ {τ}, Γ ∋ τ → Δ ∋ τ)
   → ∀ {τ τ'}, Γ; τ' ∋ τ → Δ; τ' ∋ τ := by
     intros ρ τ τ' h
     cases h with
     | here => apply Lookup.here
     | there h => apply Lookup.there (ρ h)
 
-theorem rename {Γ Δ} : (∀ {τ}, Γ ∋ τ → Δ ∋ τ) → (∀ {τ}, Γ ⊢ τ → Δ ⊢ τ)
+def rename {Γ Δ} : (∀ {τ}, Γ ∋ τ → Δ ∋ τ) → (∀ {τ}, Γ ⊢ τ → Δ ⊢ τ)
   | ρ, _, Typing.var h => Typing.var (ρ h)
   | ρ, _, Typing.app t₁ t₂ => Typing.app (rename ρ t₁) (rename ρ t₂)
   | ρ, _, Typing.lam t => Typing.lam (rename (extend ρ) t)
   | _, _, Typing.tru => Typing.tru
   | _, _, Typing.fls => Typing.fls
   | ρ, _, Typing.ite c t₁ t₂ => Typing.ite (rename ρ c) (rename ρ t₁) (rename ρ t₂)
-
