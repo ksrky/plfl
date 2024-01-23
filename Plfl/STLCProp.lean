@@ -175,4 +175,3 @@ theorem preserve {t t' τ} : ∅ ⊢ t : τ → t —⟶ t' → ∅ ⊢ t' : τ
       | ite h' =>
           have ht₁' := preserve ht₁ h'
           apply Typing.ite ht₁' ht₂ ht₃
-

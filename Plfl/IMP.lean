@@ -1,115 +1,130 @@
-def Loc := String deriving Repr, BEq
+import Lean
 
-inductive Aexp : Type :=
-  | num : Nat → Aexp
-  | var : Loc → Aexp
-  | add : Aexp → Aexp → Aexp
-  | sub : Aexp → Aexp → Aexp
-  | mul : Aexp → Aexp → Aexp
-  deriving Repr
+open Lean Elab Meta
 
-prefix:90 "% " => Aexp.num
-prefix:90 "` " => Aexp.var
-infixl:65 " +ᵃ " => Aexp.add
-infixl:65 " -ᵃ " => Aexp.sub
-infixl:70 " *ᵃ " => Aexp.mul
+inductive IMPLit
+  | nat  : Nat  → IMPLit
+  | bool : Bool → IMPLit
 
-#eval %1 +ᵃ %2
+inductive IMPUnOp
+  | not
 
-inductive Bexp : Type
-  | tru : Bexp
-  | fls : Bexp
-  | eq  : Aexp → Aexp → Bexp
-  | le  : Aexp → Aexp → Bexp
-  | not : Bexp → Bexp
-  | and : Bexp → Bexp → Bexp
-  | or  : Bexp → Bexp → Bexp
+inductive IMPBinOp
+  | and | add | less
 
-notation "true" => Bexp.tru
-notation "false" => Bexp.fls
-infix:50 " =ᵇ " => Bexp.eq
-infix:50 " ≤ᵇ " => Bexp.le
-prefix:85 "¬ᵇ " => Bexp.not
-infixr:35 " ∧ᵇ " => Bexp.and
-infixr:30 " ∨ᵇ " => Bexp.or
+inductive IMPExpr
+  | lit : IMPLit → IMPExpr
+  | var : String → IMPExpr
+  | un  : IMPUnOp → IMPExpr → IMPExpr
+  | bin : IMPBinOp → IMPExpr → IMPExpr → IMPExpr
 
-inductive Com : Type
-  | skip  : Com
-  | asg   : Loc → Aexp → Com
-  | seq   : Com → Com → Com
-  | ite   : Bexp → Com → Com → Com
-  | while : Bexp → Com → Com
+inductive IMPProgram
+  | Skip   : IMPProgram
+  | Assign : String → IMPExpr → IMPProgram
+  | Seq    : IMPProgram → IMPProgram → IMPProgram
+  | If     : IMPExpr → IMPProgram → IMPProgram → IMPProgram
+  | While  : IMPExpr → IMPProgram → IMPProgram
 
-notation "skip" => Com.skip
-infix:60 " ≔ " => Com.asg
-infix:65 " ; " => Com.seq
-notation:60 "if" b "then" c₁:60 "else" c₂:60 => Com.ite b c₁ c₂
-notation:60 "while" b "do_" c => Com.while b c
+declare_syntax_cat imp_lit
+syntax num       : imp_lit
+syntax "true"    : imp_lit
+syntax "false"   : imp_lit
 
-def State := Loc → Nat
+def elabIMPLit : Syntax → MetaM Expr
+  -- `mkAppM` creates an `Expr.app`, given the function `Name` and the args
+  -- `mkNatLit` creates an `Expr` from a `Nat`
+  | `(imp_lit| $n:num) => mkAppM ``IMPLit.nat  #[mkNatLit n.getNat]
+  | `(imp_lit| true  ) => mkAppM ``IMPLit.bool #[.const ``Bool.true []]
+  | `(imp_lit| false ) => mkAppM ``IMPLit.bool #[.const ``Bool.false []]
+  | _ => throwUnsupportedSyntax
 
-inductive AEval : Aexp → State → Nat → Prop
-  | num {n σ} : AEval (% n) σ n
-  | var {x σ} : AEval (` x) σ (σ x)
-  | add {a₀ a₁ n₀ n₁ σ} :
-      AEval a₀ σ n₀ →
-      AEval a₁ σ n₁ →
-      AEval (a₀ +ᵃ a₁) σ (n₀ + n₁)
-  | sub {a₀ a₁ n₀ n₁ σ} :
-      AEval a₀ σ n₀ →
-      AEval a₁ σ n₁ →
-      AEval (a₀ -ᵃ a₁) σ (n₀ - n₁)
-  | mul {a₀ a₁ n₀ n₁ σ} :
-      AEval a₀ σ n₀ →
-      AEval a₁ σ n₁ →
-      AEval (a₀ *ᵃ a₁) σ (n₀ * n₁)
+elab "test_elabIMPLit " l:imp_lit : term => elabIMPLit l
 
-inductive BEval : Bexp → State → Bool → Prop
-  | tru {σ} : BEval true σ Bool.true
-  | fls {σ} : BEval false σ Bool.false
-  | eq {a₀ a₁ n₀ n₁ σ} :
-      AEval a₀ σ n₀ →
-      AEval a₁ σ n₁ →
-      BEval (a₀ =ᵇ a₁) σ (n₀ == n₁)
-  | le {a₀ a₁ n₀ n₁ σ} :
-      AEval a₀ σ n₀ →
-      AEval a₁ σ n₁ →
-      BEval (a₀ ≤ᵇ a₁) σ (n₀ <= n₁)
-  | not {b b' σ} :
-      BEval b σ b' →
-      BEval (¬ᵇ b) σ (!b')
-  | and {b₀ b₁ t₀ t₁ σ} :
-      BEval b₀ σ t₀ →
-      BEval b₁ σ t₁ →
-      BEval (b₀ ∧ᵇ b₁) σ (t₀ && t₁)
-  | or {b₀ b₁ t₀ t₁ σ} :
-      BEval b₀ σ t₀ →
-      BEval b₁ σ t₁ →
-      BEval (b₀ ∨ᵇ b₁) σ (t₀ || t₁)
+#reduce test_elabIMPLit 4     -- IMPLit.nat 4
+#reduce test_elabIMPLit true  -- IMPLit.bool true
+#reduce test_elabIMPLit false -- IMPLit.bool true
 
-def ext (σ : State) (m : Nat) (x : Loc) : State :=
-  fun y => if y == x then m else σ y
+declare_syntax_cat imp_unop
+syntax "not"     : imp_unop
 
-notation:70 σ "[" m "⧸" x "]" => ext σ m x
+def elabIMPUnOp : Syntax → MetaM Expr
+  | `(imp_unop| not) => return .const ``IMPUnOp.not []
+  | _ => throwUnsupportedSyntax
 
-inductive CEval : Cexp → State → State → Prop
-  | skip {σ} : CEval skip σ σ
-  | ass {a σ m x} : AEval a σ m → CEval (x ≔ a) σ (σ [m ⧸ x])
-  | seq {c₀ c₁ σ σ' σ''} :
-      CEval c₀ σ σ'' →
-      CEval c₁ σ'' σ' →
-      CEval (c₀ ; c₁) σ σ'
-  | itetru {b σ c₀ σ'} :
-      BEval b σ Bool.true →
-      CEval c₀ σ σ' →
-      CEval (if b then c₀ else c₁) σ σ'
-  | itefls {b σ c₀ σ'} :
-      BEval b σ Bool.true →
-      CEval c₁ σ σ' →
-      CEval (if b then c₀ else c₁) σ σ'
-  | whilefls {b σ c} :
-      BEval b σ Bool.false →
-      CEval (while b do_ c) σ σ
-  | whiletru {b σ c} :
-      BEval b σ Bool.false →
-      CEval (while b do_ c) σ σ
+declare_syntax_cat imp_binop
+syntax "+"       : imp_binop
+syntax "and"     : imp_binop
+syntax "<"       : imp_binop
+
+def elabIMPBinOp : Syntax → MetaM Expr
+  | `(imp_binop| +)   => return .const ``IMPBinOp.add []
+  | `(imp_binop| and) => return .const ``IMPBinOp.and []
+  | `(imp_binop| <)   => return .const ``IMPBinOp.less []
+  | _ => throwUnsupportedSyntax
+
+declare_syntax_cat                   imp_expr
+syntax imp_lit                     : imp_expr
+syntax ident                       : imp_expr
+syntax imp_unop imp_expr           : imp_expr
+syntax imp_expr imp_binop imp_expr : imp_expr
+
+syntax "(" imp_expr ")" : imp_expr
+
+partial def elabIMPExpr : Syntax → MetaM Expr
+  | `(imp_expr| $l:imp_lit) => do
+    let l ← elabIMPLit l
+    mkAppM ``IMPExpr.lit #[l]
+  -- `mkStrLit` creates an `Expr` from a `String`
+  | `(imp_expr| $i:ident) => mkAppM ``IMPExpr.var #[mkStrLit i.getId.toString]
+  | `(imp_expr| $b:imp_unop $e:imp_expr) => do
+    let b ← elabIMPUnOp b
+    let e ← elabIMPExpr e -- recurse!
+    mkAppM ``IMPExpr.un #[b, e]
+  | `(imp_expr| $l:imp_expr $b:imp_binop $r:imp_expr) => do
+    let l ← elabIMPExpr l -- recurse!
+    let r ← elabIMPExpr r -- recurse!
+    let b ← elabIMPBinOp b
+    mkAppM ``IMPExpr.bin #[b, l, r]
+  | `(imp_expr| ($e:imp_expr)) => elabIMPExpr e
+  | _ => throwUnsupportedSyntax
+
+elab "test_elabIMPExpr " e:imp_expr : term => elabIMPExpr e
+
+#reduce test_elabIMPExpr a
+-- IMPExpr.var "a"
+
+#reduce test_elabIMPExpr a + 5
+-- IMPExpr.bin IMPBinOp.add (IMPExpr.var "a") (IMPExpr.lit (IMPLit.nat 5))
+
+#reduce test_elabIMPExpr 1 + true
+-- IMPExpr.bin IMPBinOp.add (IMPExpr.lit (IMPLit.nat 1)) (IMPExpr.lit (IMPLit.bool true))
+
+declare_syntax_cat           imp_program
+syntax "skip"              : imp_program
+syntax ident ":=" imp_expr : imp_program
+
+syntax imp_program ";;" imp_program : imp_program
+
+syntax "if" imp_expr "then" imp_program "else" imp_program "fi" : imp_program
+syntax "while" imp_expr "do" imp_program "od" : imp_program
+
+partial def elabIMPProgram : Syntax → MetaM Expr
+  | `(imp_program| skip) => return .const ``IMPProgram.Skip []
+  | `(imp_program| $i:ident := $e:imp_expr) => do
+    let i : Expr := mkStrLit i.getId.toString
+    let e ← elabIMPExpr e
+    mkAppM ``IMPProgram.Assign #[i, e]
+  | `(imp_program| $p₁:imp_program ;; $p₂:imp_program) => do
+    let p₁ ← elabIMPProgram p₁
+    let p₂ ← elabIMPProgram p₂
+    mkAppM ``IMPProgram.Seq #[p₁, p₂]
+  | `(imp_program| if $e:imp_expr then $pT:imp_program else $pF:imp_program fi) => do
+    let e ← elabIMPExpr e
+    let pT ← elabIMPProgram pT
+    let pF ← elabIMPProgram pF
+    mkAppM ``IMPProgram.If #[e, pT, pF]
+  | `(imp_program| while $e:imp_expr do $pT:imp_program od) => do
+    let e ← elabIMPExpr e
+    let pT ← elabIMPProgram pT
+    mkAppM ``IMPProgram.While #[e, pT]
+  | _ => throwUnsupportedSyntax

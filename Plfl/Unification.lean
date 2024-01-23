@@ -3,11 +3,11 @@ import Mathlib.Data.List.Dedup
 
 /- Variables -/
 def Var : Type := Nat
-instance : DecidableEq Var := Nat.decEq
+  deriving DecidableEq
 
 /- Symbols -/
 def Symbol : Type := String
-instance : DecidableEq Symbol := String.decEq
+  deriving DecidableEq
 
 /- Arrow symbol -/
 def arrow : Symbol := "->"
@@ -27,7 +27,7 @@ def subst (x : Var) (t t' : Ty) : Ty :=
 
 notation:90 "[" x "↦" t "]" t':50 => subst x t t'
 
-def subs_constraint (x : Var) (t : Ty) : Ty × Ty -> Ty × Ty
+def subs_constraint (x : Var) (t : Ty) : Ty × Ty → Ty × Ty
   | (t1, t2) => ([x ↦ t] t1, [x ↦ t] t2)
 
 /- Getting type variables from type -/

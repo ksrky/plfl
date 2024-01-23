@@ -100,7 +100,7 @@ theorem step_is_decidable : t —⟶ t' → t —⟶ t'' → t' = t''
   | Step.iszro ht, Step.iszro ht' => by simp [step_is_decidable ht ht']
 
 /- Definition: Reflexive and transitive closure of Step -/
-inductive Steps : Tm → Tm → Prop
+inductive Steps : Tm → Tm → Type
   | refl {t}        : Steps t t
   | step {t t' t''} : Step t t' → Steps t' t'' → Steps t t''
 
@@ -116,8 +116,6 @@ theorem uniq_norm : t —⟶* u → t —⟶* u' → is_norm u → is_norm u' �
   | Steps.step h₁ h₂, Steps.step h₁' h₂', hn, hn' =>
       let h := step_is_decidable h₁ h₁'
       uniq_norm (h ▸ h₂) h₂' hn hn'
-
-def terminate_steps {t} : ∃ t', t —⟶* t' := sorry
 
 /-
 TODO: Simulate the original definition of reflective and transitive closure by Steps
