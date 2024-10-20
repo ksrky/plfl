@@ -3,14 +3,14 @@ import Plfl.STLC
 /-
   Theorem: Canonical Forms
 
-  If Γ ⊢ t : τ and t is a value, then one of the following holds:
+  If Γ ⊢ t ∶ τ and t is a value, then one of the following holds:
 
   1. t = true
   2. t = false
   3. t = λx:τ'.t'
 -/
 theorem canonical_forms_bool
-  : ∀ t, ∅ ⊢ t : bool → Val t → t = true ∨ t = false
+  : ∀ t, ∅ ⊢ t ∶ bool → Val t → t = true ∨ t = false
   := by
     intros t ht hv
     cases hv with
@@ -19,7 +19,7 @@ theorem canonical_forms_bool
     | lam => cases ht
 
 theorem canonical_forms_lam
-  : ∀ t τ₁ τ₂, ∅ ⊢ t : τ₁ ⇒ τ₂ → Val t → ∃ x t', t = λ x : τ₁ ⇒ t'
+  : ∀ t τ₁ τ₂, ∅ ⊢ t ∶ τ₁ ⇒ τ₂ → Val t → ∃ x t', t = λ x : τ₁ ⇒ t'
   := by
     intros t τ₁ τ₂ ht hv
     cases hv with
@@ -32,7 +32,7 @@ theorem canonical_forms_lam
         simp
 
 /- Theorem: Progress -/
-theorem progress {t τ} : ∅ ⊢ t : τ → Val t ∨ (∃ t', t —⟶ t')
+theorem progress {t τ} : ∅ ⊢ t ∶ τ → Val t ∨ (∃ t', t ——→ t')
   | Typing.var x => by contradiction
   | Typing.app ht₁ ht₂ => by
       have ht₁' := progress ht₁
@@ -81,7 +81,7 @@ theorem extend {Γ Δ} : (∀ {x τ}, Γ ∋ x : τ → Δ ∋ x : τ)
 
 /- Lemma: Renaming -/
 theorem rename {Γ Δ} : (∀ {x τ}, Γ ∋ x : τ → Δ ∋ x : τ)
-  → (∀ {t τ}, Γ ⊢ t : τ → Δ ⊢ t : τ)
+  → (∀ {t τ}, Γ ⊢ t ∶ τ → Δ ⊢ t ∶ τ)
   | ρ, _, _, Typing.var hx => Typing.var (ρ hx)
   | ρ, _, _, Typing.app ht₁ ht₂ => Typing.app (rename ρ ht₁) (rename ρ ht₂)
   | ρ, _, _, Typing.lam ht => Typing.lam (rename (extend ρ) ht)
@@ -91,13 +91,13 @@ theorem rename {Γ Δ} : (∀ {x τ}, Γ ∋ x : τ → Δ ∋ x : τ)
               Typing.ite (rename ρ ht₁) (rename ρ ht₂) (rename ρ ht₃)
 
 /- Lemma: Weakening -/
-theorem weaken {Γ t τ} : ∅ ⊢ t : τ → Γ ⊢ t : τ := rename ρ
+theorem weaken {Γ t τ} : ∅ ⊢ t ∶ τ → Γ ⊢ t ∶ τ := rename ρ
   where
     ρ : ∀ {x τ}, ∅ ∋ x : τ → Γ ∋ x : τ := by
       intros
       contradiction
 
-theorem drop {Γ x τ₁ τ₂ τ₃} : Γ; x : τ₁; x : τ₂ ⊢ t : τ₃ → Γ; x : τ₂ ⊢ t : τ₃
+theorem drop {Γ x τ₁ τ₂ τ₃} : Γ; x : τ₁; x : τ₂ ⊢ t ∶ τ₃ → Γ; x : τ₂ ⊢ t ∶ τ₃
   := rename ρ
   where
     ρ : ∀ {y τ₃}, Γ; x : τ₁; x : τ₂ ∋ y : τ₃ → Γ; x : τ₂ ∋ y : τ₃ := by
@@ -110,8 +110,8 @@ theorem drop {Γ x τ₁ τ₂ τ₃} : Γ; x : τ₁; x : τ₂ ⊢ t : τ₃ �
           | here => contradiction
           | there => assumption
 
-theorem swap {Γ x y τ₁ τ₂ τ₃} (ynex : y ≠ x) : Γ; y : τ₂; x : τ₁ ⊢ t : τ₃
-  → Γ; x : τ₁; y : τ₂ ⊢ t : τ₃ := rename ρ
+theorem swap {Γ x y τ₁ τ₂ τ₃} (ynex : y ≠ x) : Γ; y : τ₂; x : τ₁ ⊢ t ∶ τ₃
+  → Γ; x : τ₁; y : τ₂ ⊢ t ∶ τ₃ := rename ρ
   where
     ρ : ∀ {z τ₃}, Γ; y : τ₂; x : τ₁ ∋ z : τ₃ → Γ; x : τ₁; y : τ₂ ∋ z : τ₃ := by
       intros z τ₃ hyx
@@ -127,7 +127,7 @@ theorem swap {Γ x y τ₁ τ₂ τ₃} (ynex : y ≠ x) : Γ; y : τ₂; x : τ
 
 /- Lemma: Preservation of types under substitution -/
 theorem subst_preserve {Γ x t v τ₁ τ₂} :
-  ∅ ⊢ v : τ₁ → Γ; x : τ₁ ⊢ t : τ₂ → Γ ⊢ [x ↦ v] t : τ₂ := by
+  ∅ ⊢ v ∶ τ₁ → Γ; x : τ₁ ⊢ t ∶ τ₂ → Γ ⊢ [x ↦ v] t ∶ τ₂ := by
     intros hv ht
     cases ht with
     | @var _ y _ hy => cases hy with
@@ -155,9 +155,9 @@ theorem subst_preserve {Γ x t v τ₁ τ₂} :
 
 /-
   Theorem: Preservation of types
-  If ∅ ⊢ t : τ and t —⟶ t', then ∅ ⊢ t' : τ.
+  If ∅ ⊢ t ∶ τ and t ——→ t', then ∅ ⊢ t' : τ.
 -/
-theorem preserve {t t' τ} : ∅ ⊢ t : τ → t —⟶ t' → ∅ ⊢ t' : τ
+theorem preserve {t t' τ} : ∅ ⊢ t ∶ τ → t ——→ t' → ∅ ⊢ t' ∶ τ
   | Typing.var x, h => by contradiction
   | Typing.app ht₁ ht₂, h => by
       cases h with

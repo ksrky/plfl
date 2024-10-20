@@ -64,10 +64,20 @@ inductive Step : Tm → Tm → Prop
   | app₂ {v₁ t₂ t₂'} : Val v₁ → Step t₂ t₂' → Step (v₁ ⬝ t₂) (v₁ ⬝ t₂')
   | iftru {t₁ t₂} : Step (if true then t₁ else t₂) t₁
   | iffls {t₁ t₂} : Step (if false then t₁ else t₂) t₂
-  | ite {t₁ t₁' t₂ t₃} : Step t₁ t₁' →
-                          Step (if t₁ then t₂ else t₃) (if t₁' then t₂ else t₃)
+  | ite {t₁ t₁' t₂ t₃} : Step t₁ t₁' → Step (if t₁ then t₂ else t₃) (if t₁' then t₂ else t₃)
 
-infix:40 " —⟶ " => Step
+infix:40 " ——→ " => Step
+
+/- Reflexive and transitive closure of Step -/
+inductive Steps : Tm → Tm → Prop
+  | refl {t}        : Steps t t
+  | step {t t' t''} : Step t t' → Steps t' t'' → Steps t t''
+
+infix:40 " ——→* " => Steps
+
+def halts (e : Tm) : Prop := ∃ e', e ——→* e' ∧ Val e'
+
+postfix:80 " ⇓" => halts
 
 /-
   Context management
@@ -96,7 +106,7 @@ inductive Typing : Context → Tm → Ty → Prop
   | ite {Γ t₁ t₂ t₃ τ} : Typing Γ t₁ bool → Typing Γ t₂ τ → Typing Γ t₃ τ →
                           Typing Γ (if t₁ then t₂ else t₃) τ
 
-notation:40 Γ "⊢" t ":" τ:50 => Typing Γ t τ
+notation:40 Γ "⊢" t "∶" τ:50 => Typing Γ t τ
 
 theorem lookup_is_functional {Γ x τ τ'} : Γ ∋ x : τ → Γ ∋ x : τ' → τ = τ'
   | Lookup.here , Lookup.here => rfl
