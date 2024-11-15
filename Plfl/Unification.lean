@@ -1,149 +1,110 @@
-import Mathlib.Data.List.Basic
-import Mathlib.Data.List.Dedup
+import Init.Data.Fin.Basic
 
-/- Variables -/
-def Var : Type := Nat
-  deriving DecidableEq
+/--
+  A term is a symbolic expression built from variables and operators.
+  The terms in a variable set $X$ over an operator domain $\Omega$,
+  the set of which we denote by $Tm_\Omega(X)$.
+  In this formalization, we only use `leaf` and `fork` for $\Omega$.
+  We define $Tm(X)$ inductively as follows:
+-/
+inductive Tm : Type → Type
+  /-- Variables -/
+  | var  : X → Tm X
+  /-- Constant operator -/
+  | leaf : Tm X
+  /-- Binary operator -/
+  | fork : Tm X → Tm X → Tm X
 
-/- Symbols -/
-def Symbol : Type := String
-  deriving DecidableEq
+/-- A function $f : X \rightarrow Tm(Y)$ is called term substitution from set $X$ to set $Y$.-/
+abbrev Subs (X Y : Type) := X → Tm Y
 
-/- Arrow symbol -/
-def arrow : Symbol := "->"
+/-- Renaming into substitution -/
+def Subs.embed (f : X → Y) : Subs X Y := Tm.var ∘ f
 
-/- Types -/
-inductive Ty : Type
-  | var : Var → Ty
-  | con : Symbol → Ty
-  | arr : Ty → Ty → Ty
+def Subs.id : Subs X X := Tm.var
 
-/- Substitution -/
-def subst (x : Var) (t t' : Ty) : Ty :=
-  match t' with
-  | Ty.var v => if x = v then t else t'
-  | Ty.con _ => t'
-  | Ty.arr t1 t2 => Ty.arr (subst x t t1) (subst x t t2)
+/-- Monad law of $Tm$. -/
+def Subs.app (f : Subs X Y) : Tm X → Tm Y
+  | .var x => f x
+  | .leaf => .leaf
+  | .fork s t => .fork (Subs.app f s) (Subs.app f t)
 
-notation:90 "[" x "↦" t "]" t':50 => subst x t t'
+/-- Composition of term substitutions -/
+def Subs.comp (g : Subs Y Z) (f : Subs X Y) : Subs X Z :=
+  Subs.app g ∘ f
 
-def subs_constraint (x : Var) (t : Ty) : Ty × Ty → Ty × Ty
-  | (t1, t2) => ([x ↦ t] t1, [x ↦ t] t2)
+def Subs.trivial : Type → Type := Subs Unit
 
-/- Getting type variables from type -/
-def tyvars : Ty → List Var
-  | Ty.var x => [x]
-  | Ty.con _ => []
-  | Ty.arr t1 t2 => tyvars t1 ++ tyvars t2
+/-- Variables are represented as finite set of naturals. -/
+inductive Var : Nat → Type
+  | zero : {n : Nat} → Var (n + 1)
+  | succ : {n : Nat} → Var n → Var (n + 1)
 
-def tyvars_constraint : Ty × Ty -> List Var
-  | (t1, t2) => tyvars t1 ++ tyvars t2
+/--
+  `Term` is a category of terms whose objects are finite sets and
+  whose morphisms are term substitutions.
+-/
+abbrev Term n := Tm (Var n)
 
-theorem notin_subs {x : Var} {t : Ty} (t' : Ty) (x_notin_t : x ∉ tyvars t) :
-  x ∉ tyvars ([x ↦ t] t') := by
-    induction t' with
-    | var y =>
-        simp [subst]
-        split
-        exact x_notin_t
-        simp [tyvars]
-        trivial
-    | con _ => simp [subst, tyvars]
-    | arr t1 t2 ih1 ih2 =>
-        simp [subst, tyvars]
-        intro h
-        cases h with
-        | inl h => contradiction
-        | inr h => contradiction
+abbrev Subst m n := Subs (Var m) (Var n)
 
-/- Getting symbols from type -/
-def symbols : Ty → List Symbol
-  | Ty.var _ => []
-  | Ty.con s => [s]
-  | Ty.arr t1 t2 => symbols t1 ++ [arrow] ++ symbols t2
+def thin : {n : Nat} → Var (n + 1) → Var n → Var (n + 1)
+  | _, .zero, y => .succ y
+  | _, .succ _, .zero => .zero
+  | _ + 1, .succ x, .succ y => .succ (thin x y)
 
-def symbols_constraint : Ty × Ty -> List Symbol := fun
-  | (t1, t2) => symbols t1 ++ symbols t2
+/-- Partial inverse to `thin`. -/
+def thick : {n : Nat} → Var (n + 1) → Var (n + 1) → Option (Var n)
+  | _, .zero, .zero => none
+  | _, .zero, .succ y => some y
+  | _ + 1, .succ _, .zero => some .zero
+  | _ + 1, .succ x, .succ y => .succ <$> thick x y
 
-/- Occurs check -/
-def occurs (x : Var) : Ty -> Bool
-  | Ty.var y => x = y
-  | Ty.con _ => false
-  | Ty.arr t1 t2 => occurs x t1 || occurs x t2
+def occurs : Var (n + 1) → Term (n + 1) → Option (Term n)
+  | x, .var y => .var <$> thick x y
+  | _, .leaf => .some .leaf
+  | x, .fork s t => .fork <$> occurs x s <*> occurs x t
 
-theorem not_occurs {x : Var} {t : Ty} (h : occurs x t = false) :
-  x ∉ tyvars t := by
-    induction t with
-    | var y =>
-        simp [tyvars]
-        intro h1
-        simp [h1, occurs] at h
-    | con _ => simp [tyvars]
-    | arr t1 t2 ih1 ih2 =>
-        simp [tyvars]
-        intro h1
-        cases h1 with
-        | inl h1 =>
-            simp [occurs] at h
-            have _ := ih1 h.left
-            contradiction
-        | inr h1 =>
-            simp [occurs] at h
-            have _ := ih2 h.right
-            contradiction
+def subst (t : Term n) (x : Var (n + 1)) (y : Var (n + 1)) : Term n :=
+  match thick x y with
+  | .none => t
+  | .some y' => .var y'
 
-theorem notin_subs_applied {x : Var} {t : Ty} (l : List (Ty × Ty)) (x_notin_t : x ∉ tyvars t) :
-  x ∉ (l.map (tyvars_constraint ∘ subs_constraint x t)).join := by
-    induction l with
-    | nil => simp
-    | cons hd tl =>
-      simp
-      intro h
-      cases h with
-      | inl h =>
-        simp [tyvars_constraint, subs_constraint] at h
-        cases h with
-        | inl h => simp [notin_subs hd.1 x_notin_t] at h
-        | inr h => simp [notin_subs hd.2 x_notin_t] at h
-      | inr h =>
-          have ⟨l, h⟩ := h
-          have ⟨h, x_in_l⟩ := h
-          have ⟨a, ⟨b, h⟩⟩ := h
-          have h := h.right
-          simp [h.symm] at x_in_l
-          simp [tyvars_constraint, subs_constraint] at x_in_l
-          cases x_in_l with
-          | inl h1 => simp [notin_subs a x_notin_t] at h1
-          | inr h1 => simp [notin_subs b x_notin_t] at h1
+notation "[" x "↦" t "]" => subst t x
 
-theorem sublemma {l l' : List Var} : (∀ x, x ∈ l → x ∈ l') →
-  l.dedup.length < l'.dedup.length := by
-    intro h
-    induction l with
-    | nil => simp [List.dedup_nil]
-    | cons hd tl htl =>
-        sorry
+inductive AList : Nat → Nat → Type
+  | nil  : AList n n
+  | snoc : AList m n → Term m → Var (m + 1) → AList (m + 1) n
 
-def unify_measure (l : List (Ty × Ty)) : Nat × Nat :=
-  ((l.map tyvars_constraint).join.eraseDup.length, (l.map symbols_constraint).join.eraseDup.length)
+def AList.append : AList m n → AList l m → AList l n
+  | ρ, .nil => ρ
+  | ρ, .snoc σ t x => snoc (append ρ σ) t x
 
-def unify : List (Ty × Ty) →  Option (List (Var × Ty))
-  | [] => some []
-  | (Ty.var x, t) :: l' => if h : occurs x t
-    then none
-    else Option.map (fun l => (x, t) :: l) (unify (l'.map (subs_constraint x t)))
-  | (t, Ty.var x) :: l' => unify ((Ty.var x, t) :: l')
-  | (Ty.con s, Ty.con s') :: l' => if s = s' then unify l' else none
-  | (Ty.arr t1 t2, Ty.arr t1' t2') :: l' => unify ((t1, t1') :: (t2, t2') :: l')
-  | _ => none
-termination_by
-  unify l => unify_measure l
-decreasing_by
-  simp_wf
-  apply Prod.Lex.left
-  simp
-  simp at h
-  have x_notin_t := not_occurs h
-  have h1 := notin_subs_applied l' x_notin_t
-  apply sublemma
-  sorry
+def flexFlex : {m : Nat} → Var m → Var m → Sigma (AList m)
+  | m + 1, x, y =>
+      match thick x y with
+      | .none => ⟨m + 1, .nil⟩
+      | .some y' => ⟨m, .snoc .nil (.var y') x⟩
+
+def flexRigid : {m : Nat} → Var m → Term m → Option (Sigma (AList m))
+  | m + 1, x, t =>
+      match occurs x t with
+      | .none => none
+      | .some t' => some ⟨m, .snoc .nil t' x⟩
+
+def amgu {m : Nat} : Term m → Term m → Sigma (AList m) → Option (Sigma (AList m))
+  | .leaf, .leaf, acc => some acc
+  | .leaf, .fork _ _, _ => none
+  | .fork _ _, .leaf, _ => none
+  | .fork s₁ s₂, .fork t₁ t₂, acc => amgu s₁ t₁ acc >>= amgu s₂ t₂
+  | .var x, .var y, ⟨_, .nil⟩ => some (flexFlex x y)
+  | .var x, t, ⟨_, .nil⟩ => flexRigid x t
+  | s, .var x, ⟨_, .nil⟩ => flexRigid x s
+  | s, t, ⟨n, .snoc σ r z⟩ =>
+      match amgu (Subs.app [z ↦ r] s) (Subs.app [z ↦ r] t) ⟨n, σ⟩ with
+      | .none => none
+      | .some ⟨n', σ'⟩ => some ⟨n', .snoc σ' r z⟩
+termination_by s => (m, sizeOf s)
+
+def mgu (s : Term m) (t : Term m) : Option (Sigma (AList m)) :=
+  amgu s t ⟨m, .nil⟩
