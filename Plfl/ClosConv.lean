@@ -2,9 +2,8 @@ import Init.Data.List.Basic
 
 mutual
 inductive Val : Type
-  | num : Int → Val
-  | var : String → Val
-  | lam : List String → Exp → Val
+  | var   : String → Val
+  | lam   : List String → Exp → Val
   | tuple : List Val → Val
 
 inductive Exp : Type
@@ -24,14 +23,15 @@ def Exp.letVals (xvs : List (String × Val)) : Exp →  Exp :=
 mutual
 @[simp]
 def Val.subst (x : String) (s : Val) : Val → Val
-  | .num n => .num n
   | .var y => if x = y then s else Val.var y
   | .lam ys e => .lam ys (if ys.elem x then e else Exp.subst x s e)
   | .tuple vs => .tuple (List.map (fun ⟨a, _⟩ => Val.subst x s a) vs.attach)
 
 @[simp]
 def Exp.subst (x : String) (s : Val) : Exp → Exp
-  | .letProj y i v t => .letProj y i (Val.subst x s v) (Exp.subst x s t)
+  | .letProj y i v t =>
+      if x = y then .letProj y i (Val.subst x s v) t
+      else .letProj y i (Val.subst x s v) (Exp.subst x s t)
   | .app v us => .app (Val.subst x s v) (List.map (fun ⟨a, _⟩ => Val.subst x s a) us.attach)
   | .halt v => .halt (Val.subst x s v)
 end
@@ -48,13 +48,20 @@ inductive Step : Exp → Exp → Prop
 
 infix:40 " ——→ " => Step
 
+theorem Step.letProj_tuple0 {x v vs e}
+  : @Exp.letProj (vs.length.succ) x 0 (Val.tuple (v :: vs)) e ——→ [x ↦ v] e := by
+  have h : v = (v :: vs).get (0 : Fin vs.length.succ) := by
+    simp
+  rw [h]
+  apply Step.letProj_tuple (vs := v :: vs)
+
 inductive Steps : Exp → Exp → Prop
   | halt {e v}      : e = .halt v → Steps e e
   | step {e e' e''} : e ——→ e' → Steps e' e'' → Steps e e''
 
 infix:40 " ——→* " => Steps
 
-theorem steps_composite {e e' e''} : e ——→* e' → e' ——→* e'' → e ——→* e'' := by
+theorem steps_compose {e e' e''} : e ——→* e' → e' ——→* e'' → e ——→* e'' := by
   intro h1
   intro h2
   induction h1
@@ -72,7 +79,6 @@ infix:50 " ≈ " => Eq
 
 mutual
 def Val.freeVars : Val → List String
-  | .num _ => []
   | .var x => [x]
   | .lam xs e => e.freeVars.removeAll xs
   | .tuple vs => vs.attach.foldl (fun acc ⟨v, _⟩ => (acc ++ v.freeVars).eraseDups) []
@@ -100,7 +106,6 @@ termination_by xs.length
 
 mutual
 def Val.clos_conv : Val → Val
-  | .num n => .num n
   | .var x => .var x
   | .lam xs e =>
       let c := "c"
@@ -118,8 +123,8 @@ def Exp.clos_conv : Exp → Exp
       let f := "f"
       let prf := Nat.zero_lt_succ (vs.length)
       .letVal c v.clos_conv <|
-      .letProj f (.mk 0 prf) (Val.var c) <|
-      .app (Val.var c) (List.map (fun ⟨a, _⟩ => Val.clos_conv a) vs.attach)
+      .letProj f (.mk 0 prf) (.var c) <|
+      .app (.var f) (.var c :: List.map (fun ⟨a, _⟩ => Val.clos_conv a) vs.attach)
   | .halt v => .halt (Val.clos_conv v)
 termination_by e => sizeOf e
 end
@@ -143,7 +148,6 @@ theorem rel_implies_equal {e e' : Exp} : e ≳ e' → ⟦ e ⟧ ≈ e' := by
 
 theorem Val.subst_preserves {v : Val} {v' : Val} : [x ↦ v] v' ≳ [x ↦ ⟦v⟧] ⟦v'⟧ := by
   cases v'
-  case num n => simp [Val.clos_conv, Val.rel]
   case var y =>
     simp [Val.clos_conv, Val.rel]
     split
@@ -175,7 +179,10 @@ theorem Val.subst_preserves {v : Val} {v' : Val} : [x ↦ v] v' ≳ [x ↦ ⟦v�
       .
         sorry
       . sorry
-  case tuple vs => sorry -- simp [Val.clos_conv, Val.rel]
+  case tuple vs =>
+    simp [Val.clos_conv, Val.rel, List.attach_map_val]
+    intros a h
+    apply Val.subst_preserves
 
 theorem Exp.subst_preserves {e : Exp} {v : Val} : [x ↦ v] e ≳ [x ↦ ⟦v⟧] ⟦e⟧ := by
   cases e
@@ -183,48 +190,51 @@ theorem Exp.subst_preserves {e : Exp} {v : Val} : [x ↦ v] e ≳ [x ↦ ⟦v⟧
     simp [Exp.clos_conv, Exp.rel]
     exact Val.subst_preserves
   case letProj n x' i v' e' =>
-    simp
     simp [Exp.clos_conv, Exp.rel]
-    apply And.intro Val.subst_preserves Exp.subst_preserves
+    sorry -- apply And.intro Val.subst_preserves Exp.subst_preserves
   case app v' us =>
-    simp
-    simp [Exp.clos_conv, Exp.rel]
-    apply And.intro
-    . sorry
-    . exact Val.subst_preserves
+    simp [Exp.subst, List.attach_map_val, Exp.clos_conv]
+    if h1 : x = "c"
+    then sorry
+    else
+      simp [h1]
+      if h2 : x = "f"
+      then sorry
+      else
+        simp [h2]
+        sorry
 
 theorem simulation {e₁ e₁' e₂ : Exp} : e₁ ≳ e₁' ∧ e₁ ——→ e₂ → ∃ e₂', e₂ ≳ e₂' ∧ e₁' ——→* e₂' := by
   intro h1
   cases h1.right
   case app_abs xs e vs =>
     have h2 := h1.left
-    simp [Exp.rel, Exp.clos_conv, Val.clos_conv] at h2
     apply Exists.intro (⟦e.msubst (xs.zip vs)⟧)
     apply And.intro
     . simp [Exp.rel]
     . rw [← h2]
+      simp [Exp.clos_conv]
       apply Steps.step .app_abs
-      . simp [Exp.msubst]
-        apply Steps.step
-        . -- apply Step.letProj_tuple (x := "f") (i := ⟨0, _⟩)
+      . simp [List.attach_map_val, Exp.msubst, Val.clos_conv]
+        apply Steps.step (e' := ["f" ↦ _] _)
+        apply Step.letProj_tuple0
           sorry
         . sorry
         sorry
   case letProj_tuple x vs e i =>
     have h2 := h1.left
-    simp [Exp.rel, Exp.clos_conv, Val.clos_conv] at h2
     apply Exists.intro (⟦e.subst x (vs.get i)⟧)
     apply And.intro
     . simp [Exp.rel]
     . rw [← h2]
-      apply Steps.step
+      simp [Exp.rel, Exp.clos_conv, Val.clos_conv]
+      apply Steps.step (e' := [x ↦ vs.get i] e)
       . simp [List.attach_map_val]
         have h3 : Fin vs.length = Fin (List.map Val.clos_conv vs).length := by
           rw [List.length_map]
-        apply Step.letProj_tuple (x := x) (i := i) (vs := List.map Val.clos_conv vs)
+        apply Step.letProj_tuple (x := x) (i := h3 ▸ i) (vs := List.map Val.clos_conv vs)
         sorry
       . sorry
-      . trivial
 
 theorem simulation_terminate {e e' : Exp} {v: Val} : e ≳ e' ∧ e ⇓ v → ∃ v', e' ⇓ v' ∧ ⟦ v ⟧ ≈ v' := by
   intro h1
@@ -247,9 +257,10 @@ theorem simulation_terminate {e e' : Exp} {v: Val} : e ≳ e' ∧ e ⇓ v → �
     apply And.intro
     have h9 := h8.left
     simp at h9
-    exact steps_composite h6.right h9
+    exact steps_compose h6.right h9
     exact h8.right
 termination_by h => sizeOf h.right
+
 
 theorem completeness {e v} : e ⇓ v → ∃ v', ⟦ e ⟧ ⇓ v' ∧ ⟦ v ⟧ ≈ v' := by
   intro h1

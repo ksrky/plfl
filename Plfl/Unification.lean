@@ -50,7 +50,7 @@ abbrev Subst m n := Subs (Var m) (Var n)
 
 def thin : {n : Nat} → Var (n + 1) → Var n → Var (n + 1)
   | _, .zero, y => .succ y
-  | _, .succ _, .zero => .zero
+  | _ + 1, .succ _, .zero => .zero
   | _ + 1, .succ x, .succ y => .succ (thin x y)
 
 /-- Partial inverse to `thin`. -/
@@ -65,16 +65,20 @@ def occurs : Var (n + 1) → Term (n + 1) → Option (Term n)
   | _, .leaf => .some .leaf
   | x, .fork s t => .fork <$> occurs x s <*> occurs x t
 
-def subst (t : Term n) (x : Var (n + 1)) (y : Var (n + 1)) : Term n :=
+def subs (x : Var (n + 1)) (t : Term n) : Subst (n + 1) n := fun y =>
   match thick x y with
   | .none => t
   | .some y' => .var y'
 
-notation "[" x "↦" t "]" => subst t x
+notation "[" x "↦" t "]" => subs x t
 
 inductive AList : Nat → Nat → Type
   | nil  : AList n n
-  | snoc : AList m n → Term m → Var (m + 1) → AList (m + 1) n
+  | snoc : AList m n → Var (m + 1) →  Term m →AList (m + 1) n
+
+def AList.sub {m n} : AList m n → Subst m n
+  | .nil => Subs.id
+  | .snoc σ x t => Subs.comp (AList.sub σ) (subs x t)
 
 def AList.append : AList m n → AList l m → AList l n
   | ρ, .nil => ρ
@@ -84,13 +88,13 @@ def flexFlex : {m : Nat} → Var m → Var m → Sigma (AList m)
   | m + 1, x, y =>
       match thick x y with
       | .none => ⟨m + 1, .nil⟩
-      | .some y' => ⟨m, .snoc .nil (.var y') x⟩
+      | .some y' => ⟨m, .snoc .nil x (.var y')⟩
 
 def flexRigid : {m : Nat} → Var m → Term m → Option (Sigma (AList m))
   | m + 1, x, t =>
       match occurs x t with
       | .none => none
-      | .some t' => some ⟨m, .snoc .nil t' x⟩
+      | .some t' => some ⟨m, .snoc .nil x t'⟩
 
 def amgu {m : Nat} : Term m → Term m → Sigma (AList m) → Option (Sigma (AList m))
   | .leaf, .leaf, acc => some acc
@@ -100,10 +104,10 @@ def amgu {m : Nat} : Term m → Term m → Sigma (AList m) → Option (Sigma (AL
   | .var x, .var y, ⟨_, .nil⟩ => some (flexFlex x y)
   | .var x, t, ⟨_, .nil⟩ => flexRigid x t
   | s, .var x, ⟨_, .nil⟩ => flexRigid x s
-  | s, t, ⟨n, .snoc σ r z⟩ =>
-      match amgu (Subs.app [z ↦ r] s) (Subs.app [z ↦ r] t) ⟨n, σ⟩ with
+  | s, t, ⟨n, .snoc σ z r⟩ =>
+      match amgu ([z ↦ r].app s) ([z ↦ r].app t) ⟨n, σ⟩ with
       | .none => none
-      | .some ⟨n', σ'⟩ => some ⟨n', .snoc σ' r z⟩
+      | .some ⟨n', σ'⟩ => some ⟨n', .snoc σ' z r⟩
 termination_by s => (m, sizeOf s)
 
 def mgu (s : Term m) (t : Term m) : Option (Sigma (AList m)) :=
