@@ -16,6 +16,12 @@ inductive Lookup : Context → Ty → Type where
 
 infix:4 " ∋ " => Lookup
 
+def Rename (Γ Δ : Context) := ∀ {A : Ty}, (Γ ∋ A) → (Δ ∋ A)
+
+def ext {Γ Δ} (ρ : Rename Γ Δ) {A B} : (Γ ; B ∋ A) → (Δ ; B ∋ A)
+  | .here => .here
+  | .there x => .there (ρ x)
+
 inductive Typing : Context → Ty → Type
   | var : ∀ {Γ}, (Γ ∋ *) → Typing Γ *
   | lam : ∀ {Γ}, Typing (Γ ; *) * → Typing Γ *
@@ -25,6 +31,11 @@ infix:4 " ⊢ " => Typing
 prefix:6 "$ " => Typing.var
 prefix:6 "ƛ " => Typing.lam
 infixl:7 " ⬝ " => Typing.app
+
+def rename {Γ Δ} (ρ : Rename Γ Δ) {A} : (Γ ⊢ A) → (Δ ⊢ A)
+  | $ x => $ (ρ x)
+  | ƛ N => ƛ (rename (ext ρ) N)
+  | M ⬝ N => (rename ρ M) ⬝ (rename ρ N)
 
 inductive Value : Type
   | bot   : Value
@@ -91,6 +102,11 @@ def Env.conjR1 {Γ} {γ δ : Env Γ} : γ `⊑ (γ `⊔ δ) := fun _ => Subs.con
 
 def Env.conjR2 {Γ} {γ δ : Env Γ} : δ `⊑ (γ `⊔ δ) := fun _ => Subs.conjR2 Subs.refl
 
+def Env.ext {Γ Δ v} {γ : Env Γ} {δ : Env Δ} (ρ : Rename Γ Δ) (lt : γ `⊑ (δ ∘ ρ)) :
+   (γ `; v) `⊑ ((δ `; v) ∘ ext ρ) := fun
+  | .here => .refl
+  | .there n' => lt n'
+
 inductive Denot : ∀ {Γ}, Env Γ → (Γ ⊢ *) → Value → Type
   | var : ∀ {Γ} {γ : Env Γ} {x : Γ ∋ *}, Denot γ ($ x) (γ x)
   | maps_elim : ∀ {Γ} {γ : Env Γ} {L M : Γ ⊢ *} {v w : Value},
@@ -100,18 +116,32 @@ inductive Denot : ∀ {Γ}, Env Γ → (Γ ⊢ *) → Value → Type
   | bot_intro : ∀ {Γ} {γ : Env Γ} {M : Γ ⊢ *}, Denot γ M ⊥
   | union_intro : ∀ {Γ} {γ : Env Γ} {M : Γ ⊢ *} {v w : Value},
       Denot γ M v → (w ⊑ v) → Denot γ M w
+  | sub : ∀ {Γ} {γ : Env Γ} {M : Γ ⊢ *} {v w : Value},
+      Denot γ M v → (w ⊑ v) → Denot γ M w
 
 notation:3 Γ "⊢" γ "↓" v => Denot Γ γ v
 
-def Typing.id : ∅ ⊢ * := ƛ ($ .here)
-
-def denot_id1 {γ} : γ ⊢ .id ↓ ⊥ ↦ ⊥ := .maps_intro .var
-
-def denot_id2 {γ} : γ ⊢ .id ↓ (⊥ ↦ ⊥) ↦ (⊥ ↦ ⊥) := .maps_intro .var
+def rename_pres {Γ Δ} {γ : Env Γ} {δ : Env Δ} {M : Γ ⊢ *} {v : Value} (ρ : Rename Γ Δ) (lt : γ `⊑ (δ ∘ ρ)) :
+  (γ ⊢ M ↓ v) → (δ ⊢ (rename ρ M) ↓ v)
+    | .var (x := x) => .sub .var (lt x)
+    | .maps_elim d d₁ => .maps_elim (rename_pres ρ lt d) (rename_pres ρ lt d₁)
+    | .maps_intro d => .maps_intro (rename_pres (ext ρ) (Env.ext ρ lt) d)
+    | _ => sorry
 
 def Denotation (Γ : Context) : Type 1 := Env Γ → Value → Type
 
-def McE {Γ} (M : Γ ⊢ *) : Denotation Γ := fun γ v => γ ⊢ M ↓ v
+def Denotation.E {Γ} (M : Γ ⊢ *) : Denotation Γ := fun γ v => γ ⊢ M ↓ v
 
 def Denotation.equiv {Γ} (D₁ D₂ : Denotation Γ) : Prop :=
   (γ : Env Γ) → (v : Value) → D₁ γ v = D₂ γ v
+
+def Denotation.F {Γ} (D : Denotation (Γ ; *)) : Denotation Γ := fun
+  | γ, v ↦ w => D (γ `; v) w
+  | _, ⊥ => Unit
+  | γ, (u ⊔ v) => (F D γ u) × (F D γ v)
+
+def sub_F {Γ} {N : Γ ; * ⊢ *} {γ : Env Γ} {v u : Value} (d : Denotation.F (Denotation.E N) γ v) :
+  (u ⊑ v) → Denotation.F (Denotation.E N) γ u := fun
+    | .bot => ()
+    | .maps lt lt' => Denot.sub sorry lt'
+    | _ => sorry
