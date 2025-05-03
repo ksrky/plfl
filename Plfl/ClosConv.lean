@@ -176,8 +176,7 @@ theorem Val.subst_preserves {v : Val} {v' : Val} : [x ↦ v] v' ≳ [x ↦ ⟦v�
     case isFalse h =>
       simp [Val.rel, Val.clos_conv]
       apply And.intro
-      .
-        sorry
+      . sorry
       . sorry
   case tuple vs =>
     simp [Val.clos_conv, Val.rel, List.attach_map_val]

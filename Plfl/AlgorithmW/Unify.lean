@@ -1,4 +1,4 @@
-import Plfl.AlgorithmW.Syntax
+import Plfl.AlgorithmW.Rename
 
 namespace AlgorithmW
 abbrev Subst (m n : Nat) := Idx m → Ty n
@@ -6,28 +6,6 @@ abbrev Subst (m n : Nat) := Idx m → Ty n
 def Subst.app (f : Subst m n) : Ty m → Ty n
   | .var x => f x
   | .arrow s t => .arrow (Subst.app f s) (Subst.app f t)
-
-def thin : {n : Nat} → Idx (n + 1) → Idx n → Idx (n + 1)
-  | _, .zero, y => .succ y
-  | _, .succ _, .zero => .zero
-  | _ + 1, .succ x, .succ y => .succ (thin x y)
-
-def thick : {n : Nat} → Idx (n + 1) → Idx (n + 1) → Option (Idx n)
-  | _, .zero, .zero => none
-  | _, .zero, .succ y => some y
-  | _ + 1, .succ _, .zero => some .zero
-  | _ + 1, .succ x, .succ y => .succ <$> thick x y
-
-def occurs : Idx (n + 1) → Ty (n + 1) → Option (Ty n)
-  | x, .var y => .var <$> thick x y
-  | x, .arrow s t => .arrow <$> occurs x s <*> occurs x t
-
-def replace (t : Ty n) (x : Idx (n + 1)) (y : Idx (n + 1)) : Ty n :=
-  match thick x y with
-  | .none => t
-  | .some y' => .var y'
-
-notation "[" x "↦" t "]" => replace t x
 
 def flexFlex : {m : Nat} → Idx m → Idx m → Sigma (AList m)
   | m + 1, x, y =>
@@ -54,4 +32,54 @@ termination_by s => (m, sizeOf s)
 
 def unify (s : Ty m) (t : Ty m) : Option (Sigma (AList m)) :=
   aunify s t ⟨m, .nil⟩
+
+def flexFlex2 : {m : Nat} →  (x y : Fin m) → Σ n, Σ σ : AList m n, Decidable ((Ty.var x).subst σ = (Ty.var y).subst σ)
+  | m + 1, x, y =>
+      match h1 : thick x y with
+      | .none =>
+          let eq := congrArg (Ty.subst .nil ∘ .var) (thick_none_eq x y h1)
+          ⟨m + 1, .nil, isTrue eq⟩
+      | .some y' =>
+          let eq : (Ty.var x).subst (.snoc .nil x (.var y')) = (Ty.var y).subst (.snoc .nil x (.var y')) :=
+            sorry -- congrArg (Ty.subst (.snoc .nil x (.var y')) ∘ .var) sorry
+          have h : (Ty.var x).subst (.snoc .nil x (.var y')) = (Ty.var y).subst (.snoc .nil x (.var y')) := by
+            simp [Ty.subst, replace, thick_same_none x]
+            cases h : thick x y with
+            | none => simp [Ty.subst]
+            | some v =>
+                simp [Ty.subst]
+                have h' : some y' = some v := by rw [← h, ← h1]
+                cases h'
+                rfl
+          ⟨m, .snoc .nil x (.var y'), isTrue eq⟩
+
+def flexRigid2 : {m : Nat} → (x : Fin m) → (t : Ty m) → Option (Σ n, Σ σ : AList m n, Decidable ((Ty.var x).subst σ = t.subst σ))
+  | m + 1, x, t =>
+      match h : occurs x t with
+      | .none => none
+      | .some t' =>
+          have h' : (Ty.var x).subst (AList.nil.snoc x t') = t.subst (AList.nil.snoc x t') := by
+            simp [Ty.subst]
+            rw [thick_none_eq x x (thick_same_none x)]
+            simp [replace, thick_same_none x, Ty.subst_nil]
+            cases t with
+            | var y =>
+                simp [Ty.subst, replace]
+                simp [occurs] at h
+                have ⟨a, h1, h2⟩ := h
+                simp [h1, ← h2, Ty.subst_nil]
+            | arrow a b =>
+                simp [Ty.subst, replace]
+                simp [occurs, Seq.seq, Option.map] at h
+                sorry
+          some ⟨m, .snoc .nil x t', isTrue h'⟩
+
+def aunify2 : (s : Ty m) → (t : Ty m) → (Σ n, AList m n) → Option (Σ n, Σ σ : AList m n, Decidable (s.subst σ = t.subst σ))
+  | .arrow s₁ s₂, .arrow t₁ t₂, acc => do
+      -- aunify2 s₂ t₂ acc
+      sorry --  >>= aunify2 s₂ t₂
+  | _, _, _ => sorry
+
+def unify2 {m : Nat} : (s t : Ty m) → Option (Σ n, Σ σ : AList m n, Decidable (s.subst σ = t.subst σ))
+  | _, _ => sorry
 end AlgorithmW

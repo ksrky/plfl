@@ -1,66 +1,121 @@
-import Init.Data.Fin.Basic
+import Plfl.Unification.Category
+
+namespace FOU
+
+open CategoryTheory
 
 /--
   A term is a symbolic expression built from variables and operators.
-  The terms in a variable set $X$ over an operator domain $\Omega$,
-  the set of which we denote by $Tm_\Omega(X)$.
-  In this formalization, we only use `leaf` and `fork` for $\Omega$.
-  We define $Tm(X)$ inductively as follows:
+  The terms in a variable set $X$ over an operator domain $\Sigma$,
+  the set of which we denote by $Tm_\Sigma(X)$.
+  In this formalization, we only use `leaf` and `fork` for elements of $\Sigma$.
+  Hence, we define $Tm(X)$ inductively as follows:
 -/
 inductive Tm : Type → Type
   /-- Variables -/
   | var  : X → Tm X
-  /-- Constant operator -/
+  /-- Operator -/
   | leaf : Tm X
   /-- Binary operator -/
   | fork : Tm X → Tm X → Tm X
 
-/-- A function $f : X \rightarrow Tm(Y)$ is called term substitution from set $X$ to set $Y$.-/
-abbrev Subs (X Y : Type) := X → Tm Y
-
-/-- Renaming into substitution -/
-def Subs.embed (f : X → Y) : Subs X Y := Tm.var ∘ f
-
-@[simp]
-def Subs.id : Subs X X := Tm.var
-
-/-- Monad law of $Tm$. -/
-def Subs.app (f : Subs X Y) : Tm X → Tm Y
+def Tm.bind (t : Tm X) (f : X → Tm Y) : Tm Y := match t with
   | .var x => f x
   | .leaf => .leaf
-  | .fork s t => .fork (Subs.app f s) (Subs.app f t)
+  | .fork s t => .fork (Tm.bind s f) (Tm.bind t f)
 
-/-- Composition of term substitutions -/
-@[simp]
-def Subs.comp (g : Subs Y Z) (f : Subs X Y) : Subs X Z :=
-  Subs.app g ∘ f
+instance : Bind Tm where
+  bind := Tm.bind
 
-def Subs.trivial : Type → Type := Subs Unit
+theorem bind_var_identical {t : Tm X} : t.bind .var = t := by
+  induction t with
+  | var => simp [Tm.bind]
+  | leaf => simp [Tm.bind]
+  | fork _ _ h1 h2 => simp [Tm.bind]; exact And.intro h1 h2
+
+-- abbrev Eqn (X : Type) := Sub.Parallel Unit X
 
 /-- Variables are represented as finite set of naturals. -/
-inductive Var : Nat → Type
-  | zero : {n : Nat} → Var (n + 1)
-  | succ : {n : Nat} → Var n → Var (n + 1)
-
+inductive Fin : Nat → Type
+  | zero : {n : Nat} → Fin (n + 1)
+  | succ : {n : Nat} → Fin n → Fin (n + 1)
 /--
   `Term` is a category of terms whose objects are finite sets and
   whose morphisms are term substitutions.
 -/
-abbrev Term n := Tm (Var n)
+abbrev Term (n : Nat) := Tm (Fin n)
 
-abbrev Subst m n := Subs (Var m) (Var n)
+-- abbrev Equation (n : Nat) := Eqn (Term n)
+-- abbrev Equations (n : Nat) := List (Equation n)
+
+/-- Partial inverse to `thin`. -/
+def thick : {n : Nat} → Fin (n + 1) → Fin (n + 1) → Option (Fin n)
+  | _, .zero, .zero => none
+  | _, .zero, .succ y => some y
+  | _ + 1, .succ _, .zero => some .zero
+  | _ + 1, .succ x, .succ y => .succ <$> thick x y
+
+def Tm.subs (x : Fin (n + 1)) (t : Term n) : Fin (n + 1) → Term n := fun y =>
+  match thick x y with
+  | .none => t
+  | .some y' => .var y'
+
+inductive AList : Nat → Nat → Type
+  | nil  : AList n n
+  | snoc : AList m n → Fin (m + 1) →  Term m → AList (m + 1) n
+
+def AList.append : AList m n → AList l m → AList l n
+  | ρ, .nil => ρ
+  | ρ, .snoc σ t x => snoc (append ρ σ) t x
+
+theorem AList.identity₁ {f : AList m n} : append f nil = f := by simp [append]
+
+theorem AList.identity₂ {f : AList m n} : append nil f = f := by
+  induction f with
+  | nil => simp [append]
+  | snoc _ _ _ ih => simp [append]; exact ih
+
+theorem AList.assoc {f : AList k l} {g : AList l m} {h : AList m n} : append (append h g) f = append h (append g f) := by
+  induction f with
+  | nil => simp [append]
+  | snoc _ _ _ ih => simp [append]; exact ih (g := g)
+
+def Subs : Category where
+  Obj := Nat
+  Hom := AList
+  id := AList.nil
+  comp := AList.append
+  identity₁ := AList.identity₁
+  identity₂ := AList.identity₂
+  assoc := AList.assoc
+
+def AList.subs {m n} : AList m n → Fin m → Term n
+  | .nil => Tm.var
+  | .snoc σ x t => fun y => .bind (.subs x t y) σ.subs
+
+def Mgu (σ : AList m n) (s : Term m) (t : Term m) : Prop :=
+  s.bind σ.subs = t.bind σ.subs ∧ ∀ {l : Nat}, ∀ σ' : AList m l, ∃ ρ : AList n l, σ' = ρ.append σ
+
+def aunify {m : Nat} : (s : Term m) → (t : Term m) → (acc : Sigma (AList m)) → Option (Σ n, Σ σ : AList m n, Decidable (Mgu σ s t))
+  | .leaf, .fork _ _, _ => none
+  | .fork _ _, .leaf, _ => none
+  | _, _, _ => sorry
+
+def unify (s : Term m) (t : Term m) : Option (Σ n, Σ σ : AList m n, Decidable (Mgu σ s t)) :=
+  aunify s t ⟨m, .nil⟩
+
+end FOU
+
+/-
+/-- Renaming into substitution -/
+def Subs.embed (f : X → Y) : Subs X Y := Tm.var ∘ f
+
+def Subs.trivial : Type → Type := Subs Unit
 
 def thin : {n : Nat} → Var (n + 1) → Var n → Var (n + 1)
   | _, .zero, y => .succ y
   | _ + 1, .succ _, .zero => .zero
   | _ + 1, .succ x, .succ y => .succ (thin x y)
-
-/-- Partial inverse to `thin`. -/
-def thick : {n : Nat} → Var (n + 1) → Var (n + 1) → Option (Var n)
-  | _, .zero, .zero => none
-  | _, .zero, .succ y => some y
-  | _ + 1, .succ _, .zero => some .zero
-  | _ + 1, .succ x, .succ y => .succ <$> thick x y
 
 theorem thick_none_eq : {n : Nat} → (x y : Var (n + 1)) → thick x y = none → x = y
   | _, .zero, .zero, _ => rfl
@@ -77,20 +132,7 @@ def occurs : Var (n + 1) → Term (n + 1) → Option (Term n)
   | _, .leaf => .some .leaf
   | x, .fork s t => .fork <$> occurs x s <*> occurs x t
 
-def subs (x : Var (n + 1)) (t : Term n) : Subst (n + 1) n := fun y =>
-  match thick x y with
-  | .none => t
-  | .some y' => .var y'
-
 notation "[" x "↦" t "]" => subs x t
-
-inductive AList : Nat → Nat → Type
-  | nil  : AList n n
-  | snoc : AList m n → Var (m + 1) →  Term m →AList (m + 1) n
-
-def AList.sub {m n} : AList m n → Subst m n
-  | .nil => Subs.id
-  | .snoc σ x t => Subs.comp (AList.sub σ) (subs x t)
 
 def AList.append : AList m n → AList l m → AList l n
   | ρ, .nil => ρ
@@ -141,26 +183,4 @@ def amgu {m : Nat} : (s : Term m) → (t : Term m) → (acc : Sigma (AList m))
       match amgu ([z ↦ r].app s) ([z ↦ r].app t) ⟨n, σ⟩ with
       | .none => none
       | .some ⟨n', σ', eq⟩ => sorry -- some ⟨n', .snoc σ' z r, eq⟩
-
-def mgu (s : Term m) (t : Term m) : Option (Σ n, Σ σ : AList m n, Decidable (σ.sub.app s = σ.sub.app t)) :=
-  amgu s t ⟨m, .nil⟩
-
-
-inductive T : Type
-
-axiom
-  subt : T → T → Prop
-axiom
-  sz : T →  Nat
-axiom
-  P : T → Prop
-axiom
-  indsize : (∀ s, (∀ r, sz r < sz s → P r) → P s) → ∀ s, P s
-
-theorem structural : (∀ s, (∀ r, subt r s → P r) → P s) → ∀ s, P s := by
-  intro h s
-  have h' : (∀ r, subt r s → P r) := by
-    intro r h1
-    
-    sorry
-  apply h s h'
+-/
